@@ -1,0 +1,246 @@
+# OHDSI 2026: Stage-Gated Milestone Requirements & Acceptance Criteria
+
+> **Document Type**: Production System Requirements Specification (SRS) & Acceptance Criteria (AC)  
+> **Target Audience**: Cloud DevOps Engineers, Site Reliability Engineers (SRE), Infrastructure Architects  
+> **Implementation Platform**: Dedicated Bare-Metal Host (Hetzner AX/PX) or Cloud VPC (AWS / GCP / Azure)  
+> **Status**: Approved Production Standard
+
+---
+
+## 1. Architecture Overview & Mental Model
+
+This specification defines the infrastructure, container roster, ingress routing, and verification standards for deploying the **OHDSI Analytical Research Platform**.
+
+To a systems or DevOps engineer, the platform is a standard **3-tier data warehouse and analytics system**:
+
+```
+                         SYSTEM ARCHITECTURE & INGRESS TOPOLOGY
+                                          │
+                     [ Public Internet / Researchers / AI Agents ]
+                                          │
+                            [ HTTPS: 443 / TLS 1.3 AEAD ]
+                                          │
+                                          ▼
+     ┌─────────────────────────────────────────────────────────────────────────┐
+     │                  Nginx Reverse Proxy & Edge Gateway                     │
+     │      - TLS 1.3 Termination, HSTS 2-Year, Multi-Zone Rate Limiting       │
+     │      - Small Cell Privacy Suppression Filter (MIN_CELL_COUNT >= 5)      │
+     │      - Single-Domain Path Routing (/atlas, /WebAPI, /mcp, /rstudio, /)  │
+     └───────┬────────────────────┬────────────────────┬───────────────────────┘
+             │                    │                    │
+             ▼                    ▼                    ▼
+   ┌───────────────────┐┌───────────────────┐┌─────────────────────────────────┐
+   │ Frontend Web Apps ││  Data & R Engine  ││  Agentic AI & MCP Gateway       │
+   │ - Atlas 3.0 (Vue3)││ - WebAPI Classic  ││ - FastMCP Server (:8790)        │
+   │ - Atlas Classic   ││ - WebAPI 3.0      ││   (SSE, Streamable HTTP, Stdio) │
+   │ - Shiny Studios   ││ - Dedicated R Svr ││ - Local Ollama LLM (:11434)     │
+   │ - RStudio (:8787) ││   (broadsea-hades)││ - Redis Task Broker (:6379)     │
+   └─────────┬─────────┘└─────────┬─────────┘└────────────────┬────────────────┘
+             │                    │                           │
+             └────────────────────┼───────────────────────────┘
+                                  ▼
+     ┌─────────────────────────────────────────────────────────────────────────┐
+     │            PostgreSQL 16 High-Throughput RDBMS Cluster                  │
+     │   - 64GB shared_buffers, NVMe Gen4 Storage (noatime,nodiratime)         │
+     │   - Master Lookup Schema (vocab_54: ~10M records with GIN indexes)      │
+     │   - Structured Data Warehouse Schemas (cdm_synthea100k, cdm_synpuf_23m) │
+     │   - Precomputed Aggregate Cache Schemas (results)                       │
+     │   - Port 5432 (Quarantined to Private Docker Network / VPN / Tailscale) │
+     └─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. The DevOps Rosetta Stone (Terminology Translation)
+
+| Domain Term | Software Engineering Equivalent | Technical Function |
+| :--- | :--- | :--- |
+| **OMOP CDM** | Relational Data Warehouse Schema | Standardized PostgreSQL relational schema storing subject event tables (`person`, `visit_occurrence`, `condition_occurrence`). |
+| **Athena / Vocabularies** | Master Lookup Dictionary (~10M rows) | Lookup table mapping disparate coding systems to uniform integer primary keys (`concept_id`). Uses trigram GIN indexes. |
+| **Source Daimon** | Schema Routing Registry Table | Configuration table in PostgreSQL mapping logical database aliases to physical schemas (`cdm`, `vocab`, `results`). |
+| **WebAPI** | Java Spring Boot REST Backend | Core API service providing data source management, SQL transpilation, security integration, and query execution. |
+| **Atlas (Classic & 3.0)** | Web Application Frontend | Single-Page Application (Classic: Knockout.js; 3.0: Vue 3 / single-spa) providing query authoring and visualization. |
+| **HADES / Dedicated R Server** | Dedicated R Compute Server | Containerized RStudio Server (`broadsea-hades`, port 8787) hosting all OHDSI R libraries natively. Replaces 50+ fragmented microservices. |
+| **Achilles** | Precomputed Aggregate Cache | Batch processing job that precomputes table counts and distributions, storing them in the `results` schema for instant dashboard retrieval. |
+| **Circe / Capr** | Query Transpiler & AST Builder | Compiles JSON or R criteria into target database SQL dialects (PostgreSQL, Snowflake, BigQuery). |
+| **Cohort / Phenotype** | Entity Segment / Filter Query | Specific criteria defining a population slice (e.g. subjects meeting specific criteria within a date window). |
+| **StudyAgent / MCP** | FastMCP Tool-Calling Gateway | Official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) server exposing platform capabilities to AI models via Model Context Protocol. |
+| **Small Cell Suppression** | Data Privacy Masking Filter | Re-identification protection filter automatically masking query count results where `0 < count < 5` as `"< 5"`. |
+
+---
+
+## 3. Stage-Gated Milestone Specifications
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                           STAGE-GATED ROADMAP                                          │
+├─────────┬──────────────────────────────┬───────────────────────────────────────────┬───────────────────┤
+│ Stage   │ Milestone Focus              │ Core Technologies                         │ Exit Verification │
+├─────────┼──────────────────────────────┼───────────────────────────────────────────┼───────────────────┤
+│ Gate 0  │ Host & Kernel Hardening      │ Ubuntu 24.04 LTS, NVMe noatime, UFW       │ Ports closed      │
+│ Gate 1  │ Turnkey Broadsea Core        │ broadsea-atlasdb, webapi, atlas, hades    │ WebAPI /info UP   │
+│ Gate 2  │ High-Capacity Data & Vocab   │ Postgres 16 (64GB shared_buffers), Redis  │ Vocab query <150ms│
+│ Gate 3  │ Atlas 3.0 & WebAPI 3.0       │ Atlas 3.0 (Vue 3), WebAPI 3.0, R Server   │ Atlas 3.0 live    │
+│ Gate 4  │ Public Ingress & FastMCP AI  │ Nginx TLS 1.3, Let's Encrypt, StudyAgent  │ MCP suite 100%    │
+└─────────┴──────────────────────────────┴───────────────────────────────────────────┴───────────────────┘
+```
+
+---
+
+### Stage Gate 0: Host Infrastructure, Storage & Kernel Hardening
+
+#### A. Requirements Specification
+1. **REQ-001 (Host Operating System)**: The host MUST run a clean, 64-bit installation of Ubuntu Server 24.04 LTS.
+2. **REQ-002 (Storage Mount)**: Dedicated PCIe Gen4 NVMe storage MUST be mounted at `/var/lib/postgresql/data` with filesystem options `noatime,nodiratime,data=writeback`.
+3. **REQ-003 (Kernel Tuning)**: Kernel sysctl parameters MUST be persisted at `/etc/sysctl.d/99-ohdsi.conf` configuring low swappiness (`vm.swappiness = 10`), dirty page flushing (`vm.dirty_ratio = 15`), and high socket backlog (`net.core.somaxconn = 65535`).
+4. **REQ-004 (Perimeter Security)**: Host firewall (UFW) MUST block all external ports except Port 22 (SSH), Port 80 (HTTP ACME), and Port 443 (HTTPS TLS 1.3). Database Port 5432 MUST NOT be exposed to the public internet.
+
+#### B. Acceptance Criteria Matrix
+| Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
+| :--- | :--- | :--- | :--- | :--- |
+| **AC-001** | Operating System | Host runs Ubuntu Server 24.04 LTS (x86_64). | `lsb_release -a` | `Ubuntu 24.04` reported |
+| **AC-002** | Storage Subsystem | NVMe partition mounted with `noatime,nodiratime`. | `mount \| grep postgresql` | `noatime` and `nodiratime` present |
+| **AC-003** | Kernel Parameters | Sysctl parameters active in running kernel. | `sysctl vm.swappiness net.core.somaxconn` | `10` and `65535` returned |
+| **AC-004** | Port Perimeter | Public interface rejects direct TCP 5432 connections. | `nmap -p 5432 <public-ip>` | Port reported `filtered` or `closed` |
+
+---
+
+### Stage Gate 1: Off-the-Shelf Turnkey Core (Broadsea 3.5)
+
+#### A. Requirements Specification
+1. **REQ-010 (Turnkey Orchestration)**: The deployment MUST support bootstrapping the baseline platform using official Broadsea 3.5 images (`ohdsi/broadsea-atlasdb`, `ohdsi/webapi`, `ohdsi/atlas`, `broadsea-solr-vocab`, `ohdsi/broadsea-hades`).
+2. **REQ-011 (WebAPI Classic Lifecycle)**: WebAPI 2.14 MUST start successfully, complete Flyway schema migrations, and return healthy telemetry at `/WebAPI/info`.
+3. **REQ-012 (Atlas Classic Frontend)**: Atlas Classic UI MUST be accessible via web browser and connect to WebAPI without CORS or Mixed Content errors.
+4. **REQ-013 (Solr Vocabulary Search)**: Broadsea Solr MUST be operational on port 8983 and respond to lexical autocomplete queries in `< 100ms`.
+
+#### B. Acceptance Criteria Matrix
+| Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
+| :--- | :--- | :--- | :--- | :--- |
+| **AC-010** | Broadsea Core | All 5 baseline Broadsea containers enter running state. | `docker compose ps` | Status `Up` / `healthy` for all 5 |
+| **AC-011** | WebAPI Backend | WebAPI returns valid build version and active sources. | `curl -s http://localhost:8080/WebAPI/info` | HTTP 200 with JSON payload |
+| **AC-012** | Atlas Frontend | Atlas Classic web interface loads cleanly. | `curl -s http://localhost:8082` | HTTP 200 with HTML title `ATLAS` |
+| **AC-013** | Solr Vocabulary | Solr core responds to query ping. | `curl -s http://localhost:8983/solr/admin/info/system` | HTTP 200 with system telemetry |
+
+---
+
+### Stage Gate 2: Data Scaling & Dedicated R Server
+
+#### A. Requirements Specification
+1. **REQ-020 (PostgreSQL 16 OLAP Tuning)**: PostgreSQL MUST be tuned for analytical workloads with `shared_buffers` set to at least 25% of host RAM (minimum 32GB, recommended 64GB), `work_mem = 256MB`, and `random_page_cost = 1.1`.
+2. **REQ-021 (Vocabulary Ingestion & Indexing)**: Full Athena vocabulary release (~10M rows) MUST be loaded into `vocab_54` with trigram GIN indexes (`gin(concept_name gin_trgm_ops)`). Autocomplete queries MUST complete in `< 50ms`.
+3. **REQ-022 (Redis Task Broker)**: Redis MUST be operational on port 6379 to manage asynchronous job queues and analytical results caching.
+4. **REQ-023 (Dedicated R Server Standard & Supported Package Catalog)**: All OHDSI analytical R libraries and the complete HADES suite MUST run inside a single containerized R Server (`broadsea-hades` / RStudio Server on port 8787). The implementation MUST NOT deploy fragmented Plumber microservices. The Dedicated R Server MUST maintain pre-installed support for the following packages across 6 core functional domains:
+
+   | Tier / Functional Domain | Supported Packages | Capabilities & Upstream Repository |
+   | :--- | :--- | :--- |
+   | **1. Database & SQL Infrastructure** | `DatabaseConnector`<br>`SqlRender`<br>`ParallelLogger`<br>`Andromeda` | JDBC connectivity across RDBMS dialects, parameterized SQL transpilation, high-throughput in-memory/disk data frames ([OHDSI/Hades](https://github.com/OHDSI/Hades)). |
+   | **2. Cohort Definition & Phenotyping** | `Capr`<br>`CirceR`<br>`CohortGenerator`<br>`CohortConstructor`<br>`PhenotypeLibrary`<br>`Phenotyper`<br>`Phenelope`<br>`PheValuator`<br>`Keeper`<br>`ProtocolGenerator` | Programmatic cohort authoring, Circe JSON compiler, phenotype extraction, semi-supervised phenotype evaluation (PPV/sensitivity), and timeline adjudication ([OHDSI/Capr](https://github.com/OHDSI/Capr), [OHDSI/Keeper](https://github.com/OHDSI/Keeper)). |
+   | **3. Characterization & Diagnostics** | `CohortDiagnostics`<br>`CohortIncidence`<br>`FeatureExtraction`<br>`Characterization`<br>`ClinicalCharacteristics`<br>`DbDiagnostics`<br>`DataQualityDashboard` | Phenotype characterization, incidence rate computation, covariate extraction, table shell generation, 24-point study feasibility, and data quality checks ([OHDSI/CohortDiagnostics](https://github.com/OHDSI/CohortDiagnostics)). |
+   | **4. Population-Level Causal Estimation** | `CohortMethod`<br>`SelfControlledCaseSeries`<br>`Cyclops`<br>`EvidenceSynthesis`<br>`EmpiricalCalibration`<br>`MethodEvaluation`<br>`CaseControl`<br>`CaseCrossover` | New-user active comparator cohort designs, within-person self-controlled designs, large-scale L1/L2 regularized regression, and empirical calibration using negative controls ([OHDSI/CohortMethod](https://github.com/OHDSI/CohortMethod)). |
+   | **5. Patient-Level Prediction (ML/DL)** | `PatientLevelPrediction`<br>`DeepPatientLevelPrediction`<br>`BigKnn` | Machine learning (LASSO, Random Forest, XGBoost) and deep learning clinical prediction pipelines on OMOP CDM ([OHDSI/PatientLevelPrediction](https://github.com/OHDSI/PatientLevelPrediction)). |
+   | **6. Execution, Results & Visualization** | `Strategus`<br>`ResultModelManager`<br>`ROhdsiWebApi`<br>`OhdsiShinyModules`<br>`ShinyAppBuilder`<br>`Eunomia`<br>`Taxis` | Multi-analysis pipeline orchestration, Results Data Model DDL manager, WebAPI REST integration, interactive Shiny modules, synthetic CDM testbed, and association mining ([ohdsi-studies/Taxis](https://github.com/ohdsi-studies/Taxis)). |
+
+5. **REQ-024 (External Study Packages)**: Network studies such as [`ohdsi-studies/Taxis`](https://github.com/ohdsi-studies/Taxis) MUST be executed directly within the Dedicated R Server using standard `DatabaseConnector` queries.
+6. **REQ-025 (R Server CDM & WebAPI Interconnectivity)**: The Dedicated R Server MUST have direct internal network connectivity to both the OMOP CDM PostgreSQL database (tables `person`, `condition_occurrence`, etc.) and the WebAPI backend:
+   - **Direct CDM Access**: The R Server MUST be provisioned with JDBC drivers (`DATABASECONNECTOR_JAR_FOLDER`) and environment connection parameters (`CDM_SERVER`, `CDM_PORT`, `CDM_DATABASE`, `CDM_SCHEMA`, `VOCAB_SCHEMA`, `RESULTS_SCHEMA`, `CDM_USER`, `CDM_PASSWORD`) to execute queries via `DatabaseConnector`.
+   - **Shared Single Source of Truth**: The CDM database accessed by the R Server MUST be the exact same database cluster accessed by Atlas and WebAPI.
+   - **WebAPI Integration**: The R Server MUST be configured with `WEBAPI_URL` allowing `ROhdsiWebApi` to fetch cohort definitions, export concept sets, and execute cohort generation directly against the shared WebAPI instance.
+
+#### B. Acceptance Criteria Matrix
+| Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
+| :--- | :--- | :--- | :--- | :--- |
+| **AC-020** | Database Tuning | PostgreSQL `shared_buffers` configured >= 32GB. | `psql -c "SHOW shared_buffers;"` | Value `>= 32GB` |
+| **AC-021** | Vocabulary Search | Autocomplete lookup completes under threshold. | `psql -c "EXPLAIN ANALYZE SELECT * FROM vocab_54.concept WHERE concept_name ILIKE '%diabetes%' LIMIT 20;"` | Execution time `< 50ms` |
+| **AC-022** | Redis Broker | Redis responds to PING command. | `redis-cli ping` | Returns `PONG` |
+| **AC-023** | Dedicated R Server | RStudio Server is live with complete HADES & OHDSI package suite. | Inside R Server: `sapply(c('DatabaseConnector', 'Capr', 'CohortMethod', 'PatientLevelPrediction', 'Strategus', 'ROhdsiWebApi', 'Keeper'), requireNamespace, quietly=TRUE)` | All required packages return `TRUE` |
+| **AC-024** | Zero Microservices | Zero custom Plumber microservice containers running. | `docker ps --filter "name=plumber"` | Returns 0 running containers |
+| **AC-025** | CDM & WebAPI Interconnect | R Server connects to CDM via JDBC and WebAPI via REST. | Inside R Server: `DatabaseConnector::querySql(conn, "SELECT COUNT(*) FROM cdm.person")` & `ROhdsiWebApi::getWebApiVersion(baseUrl)` | Query returns non-zero patient count; WebAPI returns active version string |
+
+---
+
+### Stage Gate 3: Atlas 3.0 Next-Gen Frontend & WebAPI 3.0
+
+#### A. Requirements Specification
+1. **REQ-030 (Atlas 3.0 Micro-Frontend)**: Atlas 3.0 (Vue 3 / single-spa) MUST be deployed side-by-side with Atlas Classic, served at the root URL path (`/`).
+2. **REQ-031 (WebAPI 3.0 Backend)**: WebAPI 3.0 (Spring Boot 3, Java 21) MUST be deployed with TrexSQL DuckDB query caching enabled.
+3. **REQ-032 (Single-Domain Edge Ingress)**: Nginx reverse proxy MUST route all services under ONE domain name:
+   - `/` -> Atlas 3.0 Frontend
+   - `/atlas/` -> Atlas Classic Frontend
+   - `/WebAPI/` -> WebAPI Backend
+   - `/rstudio/` -> Dedicated R Server (with WebSocket support)
+   - `/shiny/` -> Interactive Shiny Studio Hub
+   - `/mcp/` -> Model Context Protocol (FastMCP) AI Gateway
+
+#### B. Acceptance Criteria Matrix
+| Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
+| :--- | :--- | :--- | :--- | :--- |
+| **AC-030** | Atlas 3.0 UI | Atlas 3.0 loads at root path. | `curl -s http://<domain>/` | HTTP 200 with single-spa entrypoint |
+| **AC-031** | Modern WebAPI | WebAPI 3.0 responds with TrexSQL enabled. | `curl -s http://<domain>/WebAPI/info` | HTTP 200; TrexSQL status active |
+| **AC-032** | RStudio Ingress | Nginx proxies RStudio over HTTPS with WebSockets. | `curl -s -k https://<domain>/rstudio/` | HTTP 200 / 302 redirect to RStudio auth |
+| **AC-033** | Single Ingress | All endpoints resolve under the single domain name. | Browser navigation across `/`, `/atlas/`, `/WebAPI/`, `/rstudio/` | Zero cross-origin or port redirect errors |
+
+---
+
+### Stage Gate 4: Sovereign Agentic Tier (Hosted FastMCP & BYO-Agent)
+
+#### A. Requirements Specification
+1. **REQ-040 (Official StudyAgent Container)**: The AI agent gateway MUST use the official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) container (`ohdsi/study-agent:latest`), configured via `studyagent/config.yaml`.
+2. **REQ-041 (Multi-Transport MCP Standards)**: The gateway MUST expose Model Context Protocol (MCP) endpoints supporting:
+   - Server-Sent Events (SSE) at `/mcp/sse`.
+   - Streamable HTTP JSON-RPC at `/mcp/messages`.
+3. **REQ-042 (Authentication & RBAC)**: Requests to MCP tool endpoints MUST enforce scoped Bearer API tokens (`admin`, `study_designer`, `readonly`). Requests lacking valid tokens MUST be rejected with HTTP 401.
+4. **REQ-043 (AST SQL Guardrail)**: Incoming SQL queries from external AI agents MUST be validated via an Abstract Syntax Tree (AST) parser:
+   - Destructive commands (`DROP`, `ALTER`, `TRUNCATE`, `DELETE`, `UPDATE`, `INSERT`) MUST be blocked with HTTP 400.
+   - Raw queries selecting individual patient records without aggregation MUST be blocked.
+5. **REQ-044 (Small Cell Suppression)**: All aggregate query responses MUST enforce Small Cell Suppression: any person count `0 < count < 5` MUST be masked as `"< 5"`.
+6. **REQ-045 (Local Sovereign LLM Inference)**: The environment MUST support local, zero-data-egress LLM inference via containerized Ollama (`ollama/ollama`) on port 11434 serving open-weights models (`llama3.3:70b`, `qwen2.5:32b`).
+
+#### B. Acceptance Criteria Matrix
+| Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
+| :--- | :--- | :--- | :--- | :--- |
+| **AC-040** | StudyAgent Image | Deployment uses official `ohdsi/study-agent:latest`. | `docker inspect study-agent-mcp` | Image matches `ohdsi/study-agent` |
+| **AC-041** | MCP Discovery | MCP endpoint exposes available tools list. | `curl -s -H "Authorization: Bearer <token>" https://<domain>/api/v1/tools` | HTTP 200 with tools array |
+| **AC-042** | Auth Rejection | Unauthenticated request rejected. | `curl -s -I https://<domain>/api/v1/tools` | HTTP 401 Unauthorized |
+| **AC-043** | AST Guardrail | Destructive SQL rejected with 400. | Submit `DROP TABLE person;` to query tool | HTTP 400 with guardrail violation error |
+| **AC-044** | Small Cell Filter | Cell count between 1 and 4 is masked. | Query count returning 3 persons | Output explicitly formatted as `"< 5"` |
+| **AC-045** | Local Ollama | Ollama instance live with local model loaded. | `curl -s http://localhost:11434/api/tags` | HTTP 200 with installed model tags |
+
+---
+
+## 4. Self-Contained Verification Sign-Off Checklist
+
+DevOps engineers must audit and verify each stage gate prior to production sign-off:
+
+### Stage Gate 0: Infrastructure & Host Hardening
+- [ ] **AC-001**: Ubuntu Server 24.04 LTS verified on host.
+- [ ] **AC-002**: NVMe data partition mounted with `noatime,nodiratime` at `/var/lib/postgresql/data`.
+- [ ] **AC-003**: Kernel sysctl parameters verified in `/etc/sysctl.d/99-ohdsi.conf`.
+- [ ] **AC-004**: UFW firewall active; Port 5432 unreachable from public internet.
+
+### Stage Gate 1: Off-the-Shelf Broadsea Turnkey Core
+- [ ] **AC-010**: Broadsea 3.5 containers booted via `docker-compose.broadsea.yml`.
+- [ ] **AC-011**: WebAPI Classic responds with status `UP` at `/WebAPI/info`.
+- [ ] **AC-012**: Atlas Classic accessible via browser without CORS issues.
+- [ ] **AC-013**: Solr search core responds to vocabulary queries in `< 100ms`.
+
+### Stage Gate 2: Data Scaling & Dedicated R Server
+- [ ] **AC-020**: PostgreSQL 16 tuned with `shared_buffers >= 32GB`.
+- [ ] **AC-021**: Full Athena vocabularies loaded; trigram GIN autocomplete completes in `< 50ms`.
+- [ ] **AC-022**: Redis cache responds with `PONG` on port 6379.
+- [ ] **AC-023**: Dedicated R Server (`broadsea-hades`) live on port 8787 with HADES packages installed.
+- [ ] **AC-024**: Zero custom Plumber microservice containers running.
+- [ ] **AC-025**: R Server connects directly to CDM database via JDBC and WebAPI via REST.
+
+### Stage Gate 3: Atlas 3.0 Next-Gen & WebAPI 3.0
+- [ ] **AC-030**: Atlas 3.0 Vue 3 single-spa frontend accessible at root path (`/`).
+- [ ] **AC-031**: Modern WebAPI 3.0 operational with TrexSQL DuckDB caching.
+- [ ] **AC-032**: Nginx edge proxy terminates TLS 1.3 and routes RStudio WebSockets at `/rstudio/`.
+- [ ] **AC-033**: Single unified public domain routing verified for all endpoints.
+
+### Stage Gate 4: Sovereign Agentic Tier (MCP & BYO-Agent)
+- [ ] **AC-040**: Official `ohdsi/study-agent:latest` image running from `OHDSI/StudyAgent`.
+- [ ] **AC-041**: MCP endpoints `/mcp/sse` and `/mcp/messages` operational with live SSE stream.
+- [ ] **AC-042**: Scoped Bearer authentication enforced; 401 returned on invalid/missing tokens.
+- [ ] **AC-043**: AST SQL guardrail blocks destructive queries and raw patient-level SELECTs.
+- [ ] **AC-044**: Small Cell Suppression verified: cell counts `< 5` masked across all queries.
+- [ ] **AC-045**: Local sovereign Ollama instance operational on port 11434.

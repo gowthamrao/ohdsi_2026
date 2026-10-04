@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# R
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & temp
+# Environment & Secrets
+.env
+.env.local
+/certs/
+*.pem
+*.key
+
+# Temporary files
+/SUPERVISOR_FEEDBACK.md
+/supervisor/

@@ -1,0 +1,258 @@
+version: '3.8'
+
+# ==============================================================================
+# Sovereign OHDSI Broadsea 3.5 Turnkey Deployment Blueprint
+# Reference Repository: https://github.com/OHDSI/Broadsea
+# ==============================================================================
+# Deploys official OHDSI Broadsea container images:
+# - broadsea-atlasdb (ohdsi/broadsea-atlasdb:2.3.0) - PostgreSQL with seeded WebAPI & source daimons
+# - ohdsi-webapi (docker.io/ohdsi/webapi:latest) - OHDSI WebAPI 2.14 / 3.0 REST backend
+# - ohdsi-atlas (docker.io/ohdsi/atlas:latest) - OHDSI Atlas Classic web interface
+# - broadsea-hades (ohdsi/broadsea-hades:1.19.0) - Containerized RStudio Server + full HADES suite
+# - broadsea-solr-vocab (solr:8.11.1) - Solr-based high-speed OMOP Vocabulary search
+# - broadsea-open-shiny-server (rocker/shiny:4.4.1) - Interactive Shiny evidence server
+# - broadsea-ingress (nginx:alpine / traefik:v2.11) - Unified reverse proxy & TLS 1.3 ingress
+# ==============================================================================
+
+networks:
+  broadsea-net:
+    name: broadsea-net
+    driver: bridge
+
+volumes:
+  broadsea_atlasdb_data:
+    name: broadsea_atlasdb_data
+  broadsea_hades_home:
+    name: broadsea_hades_home
+  broadsea_hades_tmp:
+    name: broadsea_hades_tmp
+  broadsea_solr_data:
+    name: broadsea_solr_data
+
+services:
+
+  # 1. Broadsea AtlasDB: Pre-configured PostgreSQL Engine with WebAPI & Source Daimon Seeds
+  broadsea-atlasdb:
+    profiles: [ "default", "atlasdb", "full" ]
+    image: ohdsi/broadsea-atlasdb:2.3.0
+    container_name: broadsea-atlasdb
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${ATLASDB_PASSWORD:-ohdsi_admin_secure_2026}
+      POSTGRES_DB: ${ATLASDB_NAME:-ohdsi}
+      POSTGRES_USER: ${ATLASDB_USER:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - broadsea_atlasdb_data:/var/lib/postgresql/data
+      - ./docker/init_db.sql:/docker-entrypoint-initdb.d/010_init_db.sql:ro
+    networks:
+      - broadsea-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ohdsi || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+
+  # 2. OHDSI WebAPI Backend Service (Official Container)
+  ohdsi-webapi:
+    profiles: [ "default", "webapi", "full" ]
+    image: docker.io/ohdsi/webapi:latest
+    container_name: broadsea-webapi
+    restart: unless-stopped
+    depends_on:
+      broadsea-atlasdb:
+        condition: service_healthy
+    environment:
+      DATASOURCE_DRIVERCLASSNAME: org.postgresql.Driver
+      DATASOURCE_URL: jdbc:postgresql://broadsea-atlasdb:5432/${ATLASDB_NAME:-ohdsi}?currentSchema=webapi
+      DATASOURCE_USERNAME: ${ATLASDB_USER:-postgres}
+      DATASOURCE_PASSWORD: ${ATLASDB_PASSWORD:-ohdsi_admin_secure_2026}
+      DATASOURCE_OHDSI_SCHEMA: webapi
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: webapi
+      SPRING_BATCH_REPOSITORY_TABLEPREFIX: webapi.BATCH_
+      FLYWAY_DATASOURCE_DRIVERCLASSNAME: org.postgresql.Driver
+      FLYWAY_DATASOURCE_URL: jdbc:postgresql://broadsea-atlasdb:5432/${ATLASDB_NAME:-ohdsi}
+      FLYWAY_DATASOURCE_USERNAME: ${ATLASDB_USER:-postgres}
+      FLYWAY_DATASOURCE_PASSWORD: ${ATLASDB_PASSWORD:-ohdsi_admin_secure_2026}
+      FLYWAY_SCHEMAS: webapi
+      FLYWAY_BASELINE_ON_MIGRATE: "true"
+      FLYWAY_TABLE: schema_history
+      flyway_baselineVersionAsString: "2.2.5.20180212152023"
+      SECURITY_CORS_ENABLED: "true"
+      SECURITY_ORIGIN: "*"
+      SOLR_ENDPOINT: "http://broadsea-solr-vocab:8983/solr"
+    ports:
+      - "8080:8080"
+    networks:
+      - broadsea-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/WebAPI/info || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+
+  # 3. OHDSI Atlas Classic Frontend (Official Container)
+  ohdsi-atlas:
+    profiles: [ "default", "atlas", "full" ]
+    image: docker.io/ohdsi/atlas:latest
+    container_name: broadsea-atlas
+    restart: unless-stopped
+    depends_on:
+      ohdsi-webapi:
+        condition: service_healthy
+    ports:
+      - "8082:80"
+    environment:
+      WEBAPI_URL: http://ohdsi-webapi:8080/WebAPI/
+    networks:
+      - broadsea-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+
+  # 4. Broadsea HADES RStudio Server Open Source (Official Container)
+  broadsea-hades:
+    profiles: [ "default", "hades", "full" ]
+    image: ohdsi/broadsea-hades:1.19.0
+    container_name: broadsea-hades
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      USER: ${HADES_USER:-ohdsi}
+      PASSWORD: ${HADES_PASSWORD:-ohdsi2026}
+      # Direct OMOP CDM Database Connection
+      CDM_SERVER: broadsea-atlasdb
+      CDM_PORT: 5432
+      CDM_DATABASE: ${ATLASDB_NAME:-ohdsi}
+      CDM_SCHEMA: ${CDM_SCHEMA:-cdm}
+      VOCAB_SCHEMA: ${VOCAB_SCHEMA:-vocabulary}
+      RESULTS_SCHEMA: ${RESULTS_SCHEMA:-results}
+      CDM_USER: ${ATLASDB_USER:-postgres}
+      CDM_PASSWORD: ${ATLASDB_PASSWORD:-ohdsi_admin_secure_2026}
+      DATABASECONNECTOR_JAR_FOLDER: /opt/drivers
+      # WebAPI & Atlas Connectivity
+      WEBAPI_URL: http://ohdsi-webapi:8080/WebAPI/
+      ATLAS_URL: http://ohdsi-atlas:80/
+    volumes:
+      - broadsea_hades_home:/home/ohdsi
+      - broadsea_hades_tmp:/tmp
+    networks:
+      - broadsea-net
+    depends_on:
+      - broadsea-atlasdb
+      - ohdsi-webapi
+    deploy:
+      resources:
+        limits:
+          cpus: "8.0"
+          memory: 16G
+        reservations:
+          cpus: "2.0"
+          memory: 4G
+
+  # 5. Broadsea Solr OMOP Vocabulary Search Engine
+  broadsea-solr-vocab:
+    profiles: [ "solr", "full" ]
+    image: solr:8.11.1
+    container_name: broadsea-solr-vocab
+    restart: unless-stopped
+    ports:
+      - "8983:8983"
+    volumes:
+      - broadsea_solr_data:/var/solr
+    networks:
+      - broadsea-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8983/solr/admin/info/system || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  # 6. Broadsea Open Shiny Server Hub
+  broadsea-open-shiny-server:
+    profiles: [ "shiny", "full" ]
+    image: rocker/shiny:4.4.1
+    container_name: broadsea-open-shiny-server
+    restart: unless-stopped
+    ports:
+      - "3838:3838"
+    volumes:
+      - ./services:/srv/shiny-server/apps:ro
+    networks:
+      - broadsea-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3838/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  # 7. Broadsea Unified Ingress Gateway (Nginx Reverse Proxy)
+  broadsea-ingress:
+    profiles: [ "default", "full" ]
+    image: nginx:alpine
+    container_name: broadsea-ingress
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/letsencrypt:ro
+    networks:
+      - broadsea-net
+    depends_on:
+      - ohdsi-webapi
+      - ohdsi-atlas
+      - broadsea-hades
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G

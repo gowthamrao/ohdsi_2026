@@ -1,0 +1,278 @@
+version: '3.8'
+
+services:
+  # 1. Reverse Proxy & Automated SSL
+  reverse-proxy:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    restart: always
+
+  # 1b. Automated ACME Certbot (Let's Encrypt TLS Renewal)
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - ./certs:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    restart: always
+
+  # 2. Sovereign OMOP Database Cluster (Tuned for 256 GB RAM)
+  ohdsi-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ohdsi_db}
+      POSTGRES_USER: ${DB_ADMIN_USER:-ohdsi_admin}
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASS:-admin123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - /var/lib/postgresql/data:/var/lib/postgresql/data
+      - ./docker/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    networks:
+      - default
+      - ohdsi-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_ADMIN_USER:-ohdsi_admin} -d ${POSTGRES_DB:-ohdsi_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    command: >
+      postgres
+        -c ssl=on
+        -c ssl_cert_file=/etc/ssl/certs/server.crt
+        -c ssl_key_file=/etc/ssl/private/server.key
+        -c shared_buffers=64GB
+        -c work_mem=512MB
+        -c maintenance_work_mem=16GB
+        -c effective_cache_size=192GB
+        -c max_parallel_workers_per_gather=8
+        -c max_parallel_maintenance_workers=8
+        -c random_page_cost=1.1
+    restart: always
+
+  # 3. WebAPI 2.14 Backend (Serving Atlas Classic)
+  webapi-classic:
+    image: ohdsi/webapi:2.14.0
+    environment:
+      DATASOURCE_URL: jdbc:postgresql://ohdsi-postgres:5432/ohdsi
+      DATASOURCE_USERNAME: ${DB_APP_USER}
+      DATASOURCE_PASSWORD: ${DB_APP_PASS}
+      SECURITY_ENABLED: "true"
+      CATALINA_OPTS: "-Xms4g -Xmx8g -XX:+UseG1GC"
+    restart: always
+
+  # 4. Atlas 1.x Classic Web Application
+  atlas-classic:
+    image: ohdsi/atlas:2.14.0
+    environment:
+      WEBAPI_URL: https://atlas.${DOMAIN}/WebAPI/
+    restart: always
+
+  # 5. Atlas 3.0 WebAPI Backend (Serving Atlas 3.0 & Pythia)
+  atlas3-webapi:
+    image: ghcr.io/ohdsi/webapi:3.0-dev
+    container_name: atlas3-webapi
+    environment:
+      DATASOURCE_DRIVERCLASSNAME: org.postgresql.Driver
+      DATASOURCE_URL: jdbc:postgresql://ohdsi-postgres:5432/ohdsi?currentSchema=webapi
+      DATASOURCE_USERNAME: ${DB_APP_USER:-atlas3_webapi}
+      DATASOURCE_PASSWORD: ${DB_APP_PASS}
+      DATASOURCE_OHDSI_SCHEMA: webapi
+      SECURITY_CORS_ENABLED: "true"
+      SECURITY_CORS_ALLOWED_ORIGINS: "http://localhost,https://atlas3.${DOMAIN}"
+      SECURITY_AUTH_DB_ENABLED: "true"
+      TREXSQL_ENABLED: "true"
+      TREXSQL_CACHE_PATH: /data/cache
+      HOME: /data
+      AWS_REGION: us-east-1
+      BAO_AGENT_MODEL: ${BAO_AGENT_MODEL:-minimax.minimax-m2.5}
+      CATALINA_OPTS: "-Xms4g -Xmx16g -XX:+UseG1GC"
+    volumes:
+      - /var/lib/atlas3/webapi-data:/data
+    ports:
+      - "8088:8080"
+    restart: always
+
+  # 6. Atlas 3.0 Next-Gen Frontend Web Application (Vue 3 / TypeScript)
+  atlas3-frontend:
+    image: ghcr.io/ohdsi/atlas3:dev
+    container_name: atlas3-frontend
+    volumes:
+      - ./services/atlas3/config-local.json:/srv/atlas/config-local.json:ro
+      - ./services/atlas3/plugins.json:/srv/atlas/config/plugins.json:ro
+      - ./services/atlas3/Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      WEBAPI_URL: https://atlas3.${DOMAIN}/WebAPI
+      CADDY_HOSTNAME: atlas3.${DOMAIN}
+      CADDY_TLS_DIRECTIVE: "tls internal"
+    ports:
+      - "3000:80"
+    restart: always
+
+  # 6b. Atlas 3.0 Database Migration & Permissions Initialiser
+  atlas3-db-init:
+    image: postgres:16-alpine
+    container_name: atlas3-db-init
+    volumes:
+      - ./atlasdb:/scripts:ro
+    environment:
+      PGHOST: ohdsi-postgres
+      PGUSER: postgres
+      PGPASSWORD: ${DB_ADMIN_PASS}
+      PGDATABASE: ohdsi
+    depends_on:
+      - atlas3-webapi
+    command: sh -c 'for f in /scripts/*.sql; do psql -f "$$f"; done'
+
+  # 7. Pythia AI Agent Gateway (Dual-Hybrid Cloud / Local Fallback)
+  pythia-agent:
+    image: ohdsi/pythia:latest
+    environment:
+      WEBAPI_URL: http://webapi-v3:8080/WebAPI
+      PRIMARY_LLM_PROVIDER: "openai"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      FALLBACK_LLM_PROVIDER: "ollama"
+      OLLAMA_ENDPOINT: "http://ollama-service:11434"
+    restart: always
+
+  # 8. Local Sovereign Fallback LLM Service
+  ollama-service:
+    image: ollama/ollama:latest
+    volumes:
+      - /opt/ollama:/root/.ollama
+    restart: always
+
+  # 9. Public & Private OHDSI R Shiny Server
+  ohdsi-shiny:
+    image: rocker/shiny:4.3.3
+    volumes:
+      - /srv/shiny-server:/srv/shiny-server
+      - /var/log/shiny-server:/var/log/shiny-server
+    restart: always
+
+  # 9b. Containerized Dedicated R Server & RStudio Server (Broadsea-HADES)
+  # Standard OHDSI R packages (Capr, CohortDiagnostics, HADES, etc.) run directly
+  # in this environment, connected directly to OMOP CDM database and WebAPI backend.
+  broadsea-hades:
+    image: ohdsi/broadsea-hades:1.19.0
+    container_name: broadsea-hades
+    ports:
+      - "8787:8787"
+    environment:
+      USER: ${HADES_USER:-ohdsi}
+      PASSWORD: ${HADES_PASSWORD:-ohdsi2026}
+      # Direct OMOP CDM Database Connection
+      CDM_SERVER: ohdsi-postgres
+      CDM_PORT: 5432
+      CDM_DATABASE: ohdsi
+      CDM_SCHEMA: ${CDM_SCHEMA:-cdm_synthea100k}
+      VOCAB_SCHEMA: ${VOCAB_SCHEMA:-vocab_54}
+      RESULTS_SCHEMA: ${RESULTS_SCHEMA:-results}
+      CDM_USER: ${DB_APP_USER:-ohdsi_app_user}
+      CDM_PASSWORD: ${DB_APP_PASS}
+      DATABASECONNECTOR_JAR_FOLDER: /opt/drivers
+      # WebAPI & Atlas Connectivity
+      WEBAPI_URL: http://webapi-classic:8080/WebAPI
+      ATLAS_URL: http://atlas-classic:80
+    volumes:
+      - broadsea_hades_home:/home/ohdsi
+      - broadsea_hades_tmp:/tmp
+    networks:
+      default:
+        aliases:
+          - rstudio_server
+      ohdsi-net:
+        aliases:
+          - rstudio_server
+    depends_on:
+      - ohdsi-postgres
+      - webapi-classic
+    restart: always
+
+  # 10. OHDSI StudyAgent MCP Server (Port 8790: Model Context Protocol & BYO-Agent Gateway)
+  study-agent-mcp:
+    image: ohdsi/study-agent:latest
+    environment:
+      OMOP_DB_ENGINE: postgresql+psycopg2://${STUDYAGENT_DB_USER:-studyagent_readonly}:${STUDYAGENT_DB_PASS}@ohdsi-postgres:5432/ohdsi
+      DATABASE_SCHEMA: vocab_54
+      STUDYAGENT_ADMIN_TOKEN: ${STUDYAGENT_ADMIN_TOKEN:-ohdsi-admin-agent-token-2026}
+      STUDYAGENT_STUDY_DESIGNER_TOKEN: ${STUDYAGENT_STUDY_DESIGNER_TOKEN:-ohdsi-study-designer-token-2026}
+      STUDYAGENT_READONLY_TOKEN: ${STUDYAGENT_READONLY_TOKEN:-ohdsi-readonly-agent-token-2026}
+      MIN_CELL_COUNT: ${MIN_CELL_COUNT:-5}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      OLLAMA_HOST: http://ollama-service:11434
+    volumes:
+      - ./studyagent/config.yaml:/app/config.yaml:ro
+      - /data/phenotype_index:/data/phenotype_index:ro
+    ports:
+      - "8790:8790"
+    depends_on:
+      - ohdsi-postgres
+      - redis
+    restart: always
+
+  # Redis Task Broker & State Machine Cache
+  redis:
+    image: redis:7-alpine
+    container_name: ohdsi-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  # Broadsea Solr OMOP Vocabulary Search Engine
+  broadsea-solr-vocab:
+    image: solr:8.11.1
+    container_name: broadsea-solr-vocab
+    ports:
+      - "8983:8983"
+    volumes:
+      - broadsea_solr_data:/var/solr
+    restart: always
+
+  # 11. OHDSI StudyAgent ACP Server (Port 8765: Agent Client Protocol & Study Design Flows)
+  study-agent-acp:
+    image: ohdsi/study-agent:latest
+    command: ["study-agent-acp-server", "--host", "0.0.0.0", "--port", "8765", "--config", "/app/config.yaml"]
+    environment:
+      MCP_SERVER_URL: http://study-agent-mcp:8790/mcp
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OLLAMA_ENDPOINT: http://ollama-service:11434
+    volumes:
+      - ./studyagent/config.yaml:/app/config.yaml:ro
+      - /data/phenotype_index:/data/phenotype_index:ro
+    ports:
+      - "8765:8765"
+    depends_on:
+      - study-agent-mcp
+    restart: always
+
+
+networks:
+  ohdsi-net:
+    name: ohdsi-net
+    driver: bridge
+
+volumes:
+  pg_data:
+    name: ohdsi_pg_data
+  webapi_data:
+    name: ohdsi_webapi_data
+  broadsea_solr_data:
+    name: broadsea_solr_data
+  redis_data:
+    name: ohdsi_redis_data
+  broadsea_hades_home:
+    name: broadsea_hades_home
+  broadsea_hades_tmp:
+    name: broadsea_hades_tmp
