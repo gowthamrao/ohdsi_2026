@@ -27,7 +27,7 @@ When delivering the sandbox to the Data Science and Informatics teams, provide t
 | **Study Shiny Apps** | `https://<domain>/shiny/` | Public / Open | Data Science: Interactive dashboards (`CohortDiagnostics`, `Taxis`). |
 | **Study Static Reports**| `https://<domain>/reports/` | Public / Open | Researchers: Quarto / RMarkdown analytical HTML reports. |
 | **WebApiMcp Bridge** | `https://<domain>/webapi-mcp/mcp` | Bearer Token / Open DEV | Agentic AI: Model Context Protocol bridge for cohort tools ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp) by Dr. Martijn Schuemie). |
-| **StudyAgent FastMCP** | `https://<domain>/mcp/sse` | Bearer Token / Open DEV | Agentic AI: FastMCP analytical queries & database tools. |
+| **StudyAgent MCP & ACP** | `https://<domain>/mcp/` & Port 8765 | Bearer Token / Open DEV | Agentic AI: Dual FastMCP tool provider (8790) & ACP flow orchestrator (8765) ([`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) by Dr. Richard D. Boyce). |
 | **Arachne Data Node** | `https://<domain>/arachne/` | User: `admin`<br>Pass: `Arachne123#` | Informatics: Federated study execution node & engine. |
 | **Web SQL Studio** | `https://<domain>/sql/` | User: `ohdsi_admin`<br>Pass: `${DB_ADMIN_PASS}` | Developers: Browser-based CloudBeaver SQL editor & ERDs. |
 | **MinIO S3 Mock** | `https://<domain>/s3/` | User: `minioadmin`<br>Pass: `${MINIO_ROOT_PASSWORD}`| Developers: S3 object storage for Strategus study artifacts. |
@@ -199,8 +199,9 @@ check "Study Shiny Server" "https://${DOMAIN}/shiny/" "Shiny"
 # 6. WebApiMcp Bridge
 check "WebApiMcp Bridge Server" "https://${DOMAIN}/webapi-mcp/health" "ok"
 
-# 7. StudyAgent FastMCP Gateway
+# 7. StudyAgent FastMCP Gateway (Port 8790) & ACP Flow Server (Port 8765)
 check "StudyAgent FastMCP Gateway" "https://${DOMAIN}/mcp/" ""
+check "StudyAgent ACP Flows" "http://localhost:8765/flows" "phenotype_make_computable"
 
 # 8. Arachne Data Node
 check "Arachne Data Node" "https://${DOMAIN}/arachne/api/v1/build-number" "buildNumber"
@@ -212,7 +213,7 @@ check "CloudBeaver Web SQL" "https://${DOMAIN}/sql/" "CloudBeaver"
 check "MinIO S3 Object Store" "https://${DOMAIN}/s3/" "MinIO"
 
 echo "=================================================="
-echo "Verification Complete: ${pass}/10 Passed, ${fail}/10 Failed"
+echo "Verification Complete: ${pass}/11 Passed, ${fail}/11 Failed"
 if [ "${fail}" -eq 0 ]; then
   echo ">>> SUCCESS: OHDSI Sandbox is 100% Certified for Handover! <<<"
 else

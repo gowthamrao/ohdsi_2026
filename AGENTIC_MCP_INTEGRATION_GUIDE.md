@@ -145,14 +145,26 @@ These tools allow agentic software to manage phenotypes and cohort logic without
 | **`generate_cohort`** | `{"cohortDefinitionId": integer, "sourceKey": string}` | Triggers asynchronous cohort generation job on the target CDM database. |
 | **`get_generation_status`** | `{"cohortDefinitionId": integer, "sourceKey": string}` | Checks cohort generation job status (`RUNNING`, `COMPLETE`, `FAILED`) and patient count. |
 
-### 2. StudyAgent FastMCP Tools (`OHDSI/StudyAgent`)
-These tools allow agentic software to run analytical jobs and inspect data securely:
+### 2. StudyAgent FastMCP & ACP Gateways (`OHDSI/StudyAgent`)
+Created by **Dr. Richard D. Boyce, PhD** (University of Pittsburgh) and the **OHDSI Study Agent Workgroup**, StudyAgent provides a dual-service architecture for autonomous and human-in-the-loop study design. See [`STUDYAGENT_SANDBOX_INTEGRATION.md`](STUDYAGENT_SANDBOX_INTEGRATION.md) for full details.
 
+#### A. FastMCP Tools (Port 8790 / Streamable HTTP)
 | Tool Name | Parameters | Safety Guardrail & Purpose |
 | :--- | :--- | :--- |
+| **`phenotype_search`** | `{"query": string, "limit": integer}` | Dense FAISS + sparse BM25 retrieval over indexed OHDSI Phenotype Library. |
+| **`phenotype_make_computable`** | `{"narrative": string, "scope": object}` | Validates Capr syntax, checks domain boundaries, and generates Circe JSON. |
+| **`keeper_concept_sets`** | `{"phenotype": string, "domain_keys": array}` | Generates condition, symptom, and treatment concept sets for Keeper review. |
 | **`run_analytical_query`** | `{"sql": string, "sourceKey": string}` | Executes read-only OMOP SQL queries. **Guardrails**: AST parser blocks destructive SQL (`DROP`, `DELETE`, `UPDATE`); Small Cell Suppression masks counts `< 5`. |
 | **`fetch_data_characterization`** | `{"sourceKey": string, "table": string}` | Fetches Achilles precomputed summaries and demographic distributions. |
 | **`submit_network_study`** | `{"studyPackageUrl": string, "sourceKey": string}` | Submits study execution package to local Dedicated R Server / Arachne execution queue. |
+
+#### B. Agent Client Protocol (ACP) Flows (Port 8765 / REST APIs)
+StudyAgent's ACP server (`study-agent-acp`) orchestrates multi-step flows with fail-closed privacy:
+- `POST /flows/phenotype_make_computable`: 3-phase review-gated Capr R & Circe synthesis.
+- `POST /flows/phenotype_recommendation`: Recommends cohorts for Target, Comparator, and Outcome roles.
+- `POST /flows/phenotype_intent_split`: Deconstructs clinical questions into OHDSI study elements.
+- `POST /flows/keeper_concept_sets_generate`: Generates review concept sets for phenotype validation.
+- `POST /flows/phenotype_validation_review`: Adjudicates de-identified patient review rows.
 
 ---
 

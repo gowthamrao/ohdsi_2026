@@ -129,7 +129,11 @@ This document establishes the formal, binding technical requirements and verifia
 ### Stage Gate 4: Sovereign Agentic Tier, Federated Network & Developer Playground
 
 #### A. Requirements Specification
-1. **REQ-040 (Official StudyAgent Container)**: The AI agent gateway MUST use the official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) container (`ohdsi/study-agent:latest`), configured via `studyagent/config.yaml`.
+1. **REQ-040 (Official StudyAgent Dual Gateway & Container Architecture)**: The AI agent gateway MUST deploy the official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) dual-service architecture (`ohdsi/study-agent:latest`, authored by Dr. Richard D. Boyce, PhD and the OHDSI Study Agent Workgroup):
+    - FastMCP tool server (`study-agent-mcp` on port 8790) exposing 36 deterministic tools for phenotype retrieval, Keeper validation, and AST validation.
+    - Agent Client Protocol flow orchestrator (`study-agent-acp` on port 8765) exposing 16 review-gated clinical flows, including `/flows/phenotype_make_computable` and `/flows/phenotype_recommendation`.
+    - Production configuration mounted from `studyagent/config.yaml` connecting to local PostgreSQL OMOP CDM and local sovereign Ollama (`llama3.3`).
+    - Standardized agent skill (`.agents/skills/phenotype-make-computable/SKILL.md`) providing review-gated Capr/Circe cohort emission.
 2. **REQ-041 (Multi-Transport MCP Standards)**: The gateway MUST expose Model Context Protocol (MCP) endpoints supporting Server-Sent Events (SSE) at `/mcp/sse` and Streamable HTTP JSON-RPC at `/mcp/messages`.
 3. **REQ-042 (Authentication & RBAC)**: Requests to MCP tool endpoints MUST enforce scoped Bearer API tokens (`admin`, `study_designer`, `readonly`). Requests lacking valid tokens MUST be rejected with HTTP 401.
 4. **REQ-043 (AST SQL Guardrail)**: Incoming SQL queries from external AI agents MUST be validated via an Abstract Syntax Tree (AST) parser to block destructive commands (`DROP`, `ALTER`, `TRUNCATE`, `DELETE`).
@@ -170,7 +174,7 @@ This document establishes the formal, binding technical requirements and verifia
 #### B. Acceptance Criteria Matrix
 | Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
 | :--- | :--- | :--- | :--- | :--- |
-| **AC-040** | StudyAgent Image | Deployment uses official `ohdsi/study-agent:latest`. | `docker inspect study-agent-mcp` | Image matches `ohdsi/study-agent` |
+| **AC-040** | StudyAgent Dual Gateways | Deployment runs `study-agent-mcp` (8790) and `study-agent-acp` (8765) with `studyagent/config.yaml` (credited to Dr. Richard D. Boyce). | `curl -s http://localhost:8765/flows` & `curl -s http://localhost:8790/mcp` | HTTP 200 with service flow catalog and FastMCP streamable-http endpoint |
 | **AC-041** | MCP Discovery | MCP endpoint exposes available tools list. | `curl -s -H "Authorization: Bearer <token>" https://<domain>/api/v1/tools` | HTTP 200 with tools array |
 | **AC-042** | Auth Rejection | Unauthenticated request rejected. | `curl -s -I https://<domain>/api/v1/tools` | HTTP 401 Unauthorized |
 | **AC-043** | AST Guardrail | Destructive SQL rejected with 400. | Submit `DROP TABLE person;` to query tool | HTTP 400 with guardrail violation error |
@@ -225,7 +229,7 @@ DevOps engineers must audit and verify each criterion prior to final handover to
 - [ ] **AC-034**: OHDSI Study Shiny apps and published reports accessible via public URL (`/shiny/`, `/reports/`).
 
 ### Stage Gate 4: Sovereign Agentic Tier, Federated Network & Developer Playground
-- [ ] **AC-040**: Official `ohdsi/study-agent:latest` image running from `OHDSI/StudyAgent`.
+- [ ] **AC-040**: StudyAgent dual gateways operational (`study-agent-mcp` on 8790, `study-agent-acp` on 8765) using `studyagent/config.yaml` and skill `.agents/skills/phenotype-make-computable/` (credited to Dr. Richard D. Boyce).
 - [ ] **AC-041**: MCP endpoints `/mcp/sse` and `/mcp/messages` operational with live SSE stream.
 - [ ] **AC-042**: Scoped Bearer authentication enforced; 401 returned on invalid/missing tokens.
 - [ ] **AC-043**: AST SQL guardrail blocks destructive queries and raw patient-level SELECTs.

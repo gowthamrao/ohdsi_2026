@@ -1,0 +1,98 @@
+# ==============================================================================
+# OHDSI StudyAgent Configuration - OHDSI Sandbox 2026
+# Upstream: https://github.com/OHDSI/StudyAgent
+# Authors: Dr. Richard D. Boyce, PhD & OHDSI Study Agent Workgroup
+# ==============================================================================
+version: 1
+profile: docker
+
+paths:
+  phenotype_index: /data/phenotype_index
+  logs: study-agent-logs
+  runtime: .study-agent-runtime
+
+# Agent Client Protocol (ACP) Server - Port 8765
+acp:
+  bind: {host: 0.0.0.0, port: 8765}
+  public_url: http://study-agent-acp:8765
+  mcp:
+    mode: http
+    url: http://study-agent-mcp:8790/mcp
+    timeout_seconds: 300
+
+# Model Context Protocol (MCP) Server - Port 8790
+mcp:
+  transport: http
+  bind: {host: 0.0.0.0, port: 8790}
+  path: /mcp
+  r:
+    rscript: Rscript
+
+# Keeper Clinical Vocabulary & Phenotyping Config
+keeper:
+  vocabulary:
+    database_schema: vocab_54
+    concept_table: concept
+  phoebe:
+    database_schema: vocab_54
+
+# LLM Orchestration Tier (Sovereign Local Ollama First, Cloud Extensible)
+llm:
+  api_url: http://ollama-service:11434/v1/chat/completions
+  model: llama3.3
+  authentication: none
+  timeout_seconds: 300
+  use_responses_api: false
+  log: false
+  log_prompt: false
+  log_response: false
+  log_json: false
+
+# Phenotype Semantic Retrieval & Embedding Layer
+retrieval:
+  embedding_url: http://ollama-service:11434/api/embed
+  embedding_model: nomic-embed-text
+  timeout_seconds: 120
+  log: false
+
+# Logging Configuration
+logging:
+  level: INFO
+  acp_file: study-agent-logs/study-agent-acp.log
+  mcp_file: study-agent-logs/study-agent-mcp.log
+  acp_to_console: true
+  mcp_to_console: true
+
+# Deployment Profiles
+profiles:
+  docker:
+    network:
+      rewrite_container_hosts: true
+    llm:
+      api_url: http://ollama-service:11434/v1/chat/completions
+    retrieval:
+      embedding_url: http://ollama-service:11434/api/embed
+    acp:
+      bind: {host: 0.0.0.0, port: 8765}
+      mcp:
+        mode: http
+        url: http://study-agent-mcp:8790/mcp
+    mcp:
+      bind: {host: 0.0.0.0, port: 8790}
+    paths:
+      phenotype_index: /data/phenotype_index
+
+  native:
+    llm:
+      api_url: http://localhost:11434/v1/chat/completions
+    retrieval:
+      embedding_url: http://localhost:11434/api/embed
+    acp:
+      bind: {host: 127.0.0.1, port: 8765}
+      mcp:
+        mode: http
+        url: http://127.0.0.1:8790/mcp
+    mcp:
+      bind: {host: 127.0.0.1, port: 8790}
+    paths:
+      phenotype_index: data/phenotype_index

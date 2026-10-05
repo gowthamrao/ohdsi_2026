@@ -256,3 +256,66 @@ services:
         limits:
           cpus: "2.0"
           memory: 2G
+
+  # 8. OHDSI StudyAgent FastMCP Gateway (Tool Provider)
+  study-agent-mcp:
+    profiles: [ "studyagent", "full" ]
+    image: ohdsi/study-agent:latest
+    container_name: broadsea-study-agent-mcp
+    restart: unless-stopped
+    environment:
+      OMOP_DB_ENGINE: postgresql+psycopg://${ATLASDB_USER:-postgres}:${ATLASDB_PASSWORD:-ohdsi_admin_secure_2026}@broadsea-atlasdb:5432/${ATLASDB_NAME:-ohdsi}
+      DATABASE_SCHEMA: ${VOCAB_SCHEMA:-vocabulary}
+      STUDYAGENT_ADMIN_TOKEN: ${STUDYAGENT_ADMIN_TOKEN:-ohdsi-admin-agent-token-2026}
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8790
+      MCP_PATH: /mcp
+    volumes:
+      - ./studyagent/config.yaml:/app/config.yaml:ro
+      - /data/phenotype_index:/data/phenotype_index:ro
+    ports:
+      - "8790:8790"
+    command: ["micromamba", "run", "-n", "base", "study-agent-mcp", "--config", "/app/config.yaml", "--profile", "docker"]
+    networks:
+      - broadsea-net
+    depends_on:
+      - broadsea-atlasdb
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  # 9. OHDSI StudyAgent ACP Agent (Flow Orchestrator)
+  study-agent-acp:
+    profiles: [ "studyagent", "full" ]
+    image: ohdsi/study-agent:latest
+    container_name: broadsea-study-agent-acp
+    restart: unless-stopped
+    environment:
+      OMOP_DB_ENGINE: postgresql+psycopg://${ATLASDB_USER:-postgres}:${ATLASDB_PASSWORD:-ohdsi_admin_secure_2026}@broadsea-atlasdb:5432/${ATLASDB_NAME:-ohdsi}
+      DATABASE_SCHEMA: ${VOCAB_SCHEMA:-vocabulary}
+      STUDY_AGENT_MCP_URL: http://study-agent-mcp:8790/mcp
+      STUDY_AGENT_HOST: 0.0.0.0
+      STUDY_AGENT_PORT: 8765
+      LLM_API_URL: http://host.docker.internal:11434/v1/chat/completions
+      LLM_MODEL: llama3.3
+      LLM_AUTHENTICATION: none
+    volumes:
+      - ./studyagent/config.yaml:/app/config.yaml:ro
+      - /data/phenotype_index:/data/phenotype_index:ro
+    ports:
+      - "8765:8765"
+    command: ["micromamba", "run", "-n", "base", "study-agent-acp", "--config", "/app/config.yaml", "--profile", "docker"]
+    networks:
+      - broadsea-net
+    depends_on:
+      - study-agent-mcp
+      - broadsea-atlasdb
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
