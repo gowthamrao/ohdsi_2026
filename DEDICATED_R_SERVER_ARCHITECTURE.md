@@ -4,6 +4,7 @@
 > **Target Audience**: DevOps Engineers, Site Reliability Engineers (SRE), Cloud Architects, Bioinformaticians  
 > **Deciders**: OHDSI Platform Engineering Team  
 > **Supersedes**: Fragmented Plumber Microservices Fleet  
+> **Cross-References**: [README.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/README.md) | [DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md) | [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md) | [ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md)
 
 ---
 

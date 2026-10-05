@@ -1,169 +1,199 @@
-# OHDSI Deployment: Engineering Execution Plan
+# OHDSI Sandbox Deployment: Engineering Execution Plan
 
-> **Target Audience**: Lead Systems Engineers, DevOps Teams, Cloud Infrastructure Administrators  
-> **Repository**: Pure Requirements & Acceptance Criteria Specification  
-> **Status**: Approved Production Runbook
+> **Platform Mission**: High-Resilience Developer Sandbox for Innovating, Collaborating & Testing Latest Ideas in Clinical Informatics and Data Science  
+> **Target Audience**: Cloud DevOps Engineers, Lead Systems Engineers, SREs, Systems Administrators  
+> **Status**: Approved Deployment Runbook & Handover Execution Plan  
+> **Cross-References**: [DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md) | [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md) | [OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md) | [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)
 
 ---
 
-## 1. Overview & 5-Stage Milestone Progression
+## 1. Overview & 4-Phase Deployment Progression
 
-This runbook guides DevOps engineers step-by-step from bare-metal host provisioning to a production-ready OHDSI platform with Atlas 3.0, Dedicated R Server, and hosted FastMCP endpoints for AI agents.
+This runbook guides DevOps engineers step-by-step through provisioning, hardening, and delivering the OHDSI Sandbox. The deployment progresses through four linear phases:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                           STAGE-GATED ROADMAP                                          │
+│                                   DEVOPS SANDBOX DEPLOYMENT PIPELINE                                   │
 ├─────────┬──────────────────────────────┬───────────────────────────────────────────┬───────────────────┤
-│ Stage   │ Milestone Focus              │ Core Technologies                         │ Exit Verification │
+│ Phase   │ Focus Area                   │ Primary Components                        │ Exit Verification │
 ├─────────┼──────────────────────────────┼───────────────────────────────────────────┼───────────────────┤
-│ Gate 0  │ Host & Kernel Hardening      │ Ubuntu 24.04 LTS, NVMe noatime, UFW       │ Ports closed      │
-│ Gate 1  │ Turnkey Broadsea Core        │ broadsea-atlasdb, webapi, atlas, hades    │ WebAPI /info UP   │
-│ Gate 2  │ High-Capacity Data & Vocab   │ Postgres 16 (64GB shared_buffers), Redis  │ Vocab query <150ms│
-│ Gate 3  │ Atlas 3.0 & WebAPI 3.0       │ Atlas 3.0 (Vue 3), WebAPI 3.0, R Server   │ Atlas 3.0 live    │
-│ Gate 4  │ MCP AI & Federated Network   │ StudyAgent, WebApiMcp, Arachne, TLS 1.3   │ Gate 4 suite 100% │
+│ Phase 1 │ Host, CoW Storage & Swap     │ Ubuntu 24.04, ZFS/Btrfs CoW, 64GB Swap    │ CoW mount & sysctl│
+├─────────┼──────────────────────────────┼───────────────────────────────────────────┼───────────────────┤
+│ Phase 2 │ Core Data Platform           │ Postgres 16 (64GB shared_buffers), Vocab  │ Vocab query <50ms │
+├─────────┼──────────────────────────────┼───────────────────────────────────────────┼───────────────────┤
+│ Phase 3 │ Compute Tier & Edge Ingress  │ Dedicated R Server, Shiny, Atlas 3.0, Nginx│ TLS 1.3 all paths │
+├─────────┼──────────────────────────────┼───────────────────────────────────────────┼───────────────────┤
+│ Phase 4 │ Agentic Gateways & Handover  │ FastMCP, WebApiMcp, Arachne, SQL, MinIO   │ Handover test 100%│
 └─────────┴──────────────────────────────┴───────────────────────────────────────────┴───────────────────┘
 ```
 
 ---
 
-## 2. Step-by-Step Execution Runbook
+## 2. Step-by-Step Deployment Runbook
 
-### Stage Gate 0: Host OS Hardening & NVMe Mount
-1. Provision Ubuntu 24.04 LTS on bare metal or cloud VM.
-2. Mount NVMe data partition with `noatime,nodiratime` at `/var/lib/postgresql/data`:
+### Phase 1: Host Hardening, CoW Storage & Anti-Panic Swap
+
+1. **Verify Operating System**: Ensure host is running Ubuntu Server 24.04 LTS (x86_64).
+2. **Configure Copy-on-Write Storage Datasets (ZFS or Btrfs)**:
+   Mount NVMe partitions with CoW capability to enable `< 30-second` developer rollbacks:
    ```bash
-   mount -o noatime,nodiratime /dev/nvme0n1p3 /var/lib/postgresql/data
+   # Create ZFS datasets for PostgreSQL data and R workspace:
+   zfs create -o mountpoint=/var/lib/postgresql/data -o compression=lz4 -o atime=off rpool/pgdata
+   zfs create -o mountpoint=/home/ohdsi -o compression=lz4 rpool/rstudio-workspace
    ```
-3. Apply kernel sysctl parameters (`/etc/sysctl.d/99-ohdsi.conf`):
+3. **Provision 64GB NVMe Swap Partition**:
+   Absorb sudden multi-core causal inference memory spikes without kernel panics:
+   ```bash
+   fallocate -l 64G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+   echo '/swapfile none swap sw 0 0' >> /etc/fstab
+   ```
+4. **Apply Kernel Tuning (`/etc/sysctl.d/99-ohdsi.conf`)**:
    ```ini
    vm.swappiness = 10
    vm.dirty_ratio = 15
+   vm.dirty_background_ratio = 5
    net.core.somaxconn = 65535
+   net.ipv4.tcp_max_syn_backlog = 8192
    ```
-4. Verify Gate 0:
+   Apply with: `sudo sysctl --system`
+5. **Configure Host Perimeter Firewall (UFW)**:
+   ```bash
+   ufw default deny incoming
+   ufw default allow outgoing
+   ufw allow 22/tcp comment 'SSH'
+   ufw allow 80/tcp comment 'HTTP ACME'
+   ufw allow 443/tcp comment 'HTTPS TLS 1.3'
+   ufw enable
+   ```
+6. **Exit Verification**:
    ```bash
    sysctl vm.swappiness net.core.somaxconn
-   mount | grep postgresql
-   ```
-
-### Stage Gate 1: Turnkey Broadsea Core
-1. Configure environment file (`.env.broadsea`).
-2. Start the Broadsea core stack:
-   ```bash
-   docker compose -f docker-compose.broadsea.yml up -d
-   ```
-3. Verify Gate 1:
-   ```bash
-   curl -s http://localhost:8080/WebAPI/info | jq .
-   curl -s http://localhost:8082
-   curl -s http://localhost:8983/solr/admin/info/system
-   ```
-
-### Stage Gate 2: High-Capacity Data, Dedicated R Server, Atlas & Shiny Deployment
-1. Launch PostgreSQL 16 tuned for 64GB+ shared buffers, Redis, Solr, R Server, and Shiny Server:
-   ```bash
-   docker compose up -d ohdsi-postgres ohdsi-redis broadsea-solr-vocab broadsea-hades ohdsi-shiny
-   ```
-2. Ingest Athena vocabularies and build trigram GIN indexes.
-3. Verify R Server interconnectivity with OMOP CDM and Vocabulary tables:
-   ```bash
-   # Verify JDBC connection to OMOP CDM and Athena Vocabularies:
-   docker exec -it broadsea-hades Rscript -e "
-     library(DatabaseConnector)
-     conn <- connect(createConnectionDetails(
-       dbms = 'postgresql',
-       server = paste0(Sys.getenv('CDM_SERVER', 'ohdsi-postgres'), '/', Sys.getenv('CDM_DATABASE', 'ohdsi')),
-       user = Sys.getenv('CDM_USER', 'ohdsi_app_user'),
-       password = Sys.getenv('CDM_PASSWORD'),
-       pathToDriver = Sys.getenv('DATABASECONNECTOR_JAR_FOLDER', '/opt/drivers')
-     ))
-     patients <- querySql(conn, paste0('SELECT COUNT(*) FROM ', Sys.getenv('CDM_SCHEMA', 'cdm'), '.person'))
-     concepts <- querySql(conn, paste0('SELECT COUNT(*) FROM ', Sys.getenv('VOCAB_SCHEMA', 'vocab_54'), '.concept'))
-     print(paste('Patients:', patients[1,1], '| Concepts:', concepts[1,1]))
-     disconnect(conn)
-   "
-   ```
-4. Verify PostgreSQL connection to Atlas Instance via WebAPI:
-   ```bash
-   curl -s http://localhost:8080/WebAPI/source/sources | jq .
-   curl -s http://localhost:8080/WebAPI/vocabulary/vocab_54/search/aspirin | jq .
-   ```
-5. Deploy and verify OHDSI Study Shiny Apps and Reports:
-   ```bash
-   # Verify Shiny Server is operational:
-   curl -s http://localhost:3838/
-   # Publish study apps (e.g. CohortDiagnostics, Taxis) to /srv/shiny-server/<study_name>/
-   # Publish study reports to /srv/reports/<study_name>/
-   ```
-
-### Stage Gate 3: Atlas 3.0 Next-Gen Frontend, WebAPI 3.0 & Public URL Ingress
-1. Deploy modern Atlas 3.0 single-spa micro-frontend and WebAPI 3.0:
-   ```bash
-   docker compose up -d atlas3-webapi atlas3-frontend atlas3-db-init reverse-proxy certbot
-   ```
-2. Verify all platform components over the single **Public Domain URL**:
-   ```bash
-   # 1. Root: Atlas 3.0 Frontend
-   curl -I -k https://<domain>/
-
-   # 2. Atlas Classic Frontend
-   curl -I -k https://<domain>/atlas/
-
-   # 3. WebAPI Backend REST API
-   curl -s -k https://<domain>/WebAPI/info | jq .
-
-   # 4. Dedicated R Server (RStudio Server Web IDE)
-   curl -I -k https://<domain>/rstudio/
-
-   # 5. OHDSI Study Shiny Apps
-   curl -I -k https://<domain>/shiny/
-
-   # 6. OHDSI Study Analytical HTML Reports
-   curl -I -k https://<domain>/reports/
-   ```
-
-### Stage Gate 4: Sovereign Agentic Tier, Federated Network & Developer Playground
-1. Launch the agentic AI gateways, Arachne federated node, and developer sandbox tools:
-   ```bash
-   docker compose up -d study-agent-mcp webapi-mcp arachne-data-node arachne-exec-engine ollama-service cloudbeaver-sql minio-s3
-   ```
-2. Test MCP agent connectivity and tool discovery:
-   ```bash
-   # Test StudyAgent MCP endpoint (SSE stream)
-   curl -s -k https://<domain>/mcp/sse -H "Authorization: Bearer <token>"
-
-   # Test WebApiMcp bridge server health and tool discovery
-   curl -s -k https://<domain>/webapi-mcp/health | jq .
-   ```
-3. Test Arachne Federated Data Node status:
-   ```bash
-   curl -s -k https://<domain>/arachne/api/v1/build-number | jq .
-   ```
-4. Verify Developer Tooling (Web SQL Studio & MinIO S3 Object Store):
-   ```bash
-   # Test CloudBeaver Web SQL Studio
-   curl -I -k https://<domain>/sql/
-
-   # Test MinIO S3 Console
-   curl -I -k https://<domain>/s3/
-   ```
-5. Test Fast Snapshot & Sub-Minute Rollback:
-   ```bash
-   # Create a test CoW snapshot before experimentation:
-   sudo ohdsi-snapshot create test-pre-experiment
-
-   # Verify snapshot listing:
-   sudo ohdsi-snapshot list
-
-   # Test instant rollback (< 30 seconds):
-   sudo ohdsi-snapshot rollback test-pre-experiment
+   swapon --show
+   zfs list
+   ufw status verbose
    ```
 
 ---
 
-## 3. Production Operations & Maintenance
+### Phase 2: Core Data Platform Deployment
 
-- **Sign-Off Audit**: Verify against the checklists in [`STAGE_GATED_SPECIFICATIONS.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md).
-- **R Package Ecosystem**: Analytical packages run directly inside `broadsea-hades` without Plumber microservice fragmentation.
-- **External Network Studies**: Clone study packages such as [`ohdsi-studies/Taxis`](https://github.com/ohdsi-studies/Taxis) directly into the Dedicated R Server.
-- **Automated Certificate Renewal**: Certbot companion container checks and renews Let's Encrypt certificates every 12 hours.
+1. **Launch PostgreSQL 16 & Redis**:
+   ```bash
+   docker compose up -d ohdsi-postgres ohdsi-redis broadsea-solr-vocab
+   ```
+2. **Ingest Standardized Athena Vocabularies & Build GIN Trigram Indexes**:
+   ```bash
+   # Load concept, concept_ancestor, concept_relationship into schema vocab_54
+   # Build trigram index for instant autocomplete (< 50ms):
+   docker exec -it ohdsi-postgres psql -U ohdsi_admin -d ohdsi -c "
+     CREATE EXTENSION IF NOT EXISTS pg_trgm;
+     CREATE INDEX IF NOT EXISTS idx_concept_name_trgm ON vocab_54.concept USING gin (concept_name gin_trgm_ops);
+   "
+   ```
+3. **Seed Synthetic CDM Datasets (Synthea 100k / CMS SynPUF 2.3M)**:
+   ```bash
+   # Restore pre-seeded synthetic benchmark data:
+   docker exec -i ohdsi-postgres psql -U ohdsi_admin -d ohdsi < /opt/ohdsi/seeds/synthea100k.sql
+   ```
+4. **Boot WebAPI Classic & Atlas Classic**:
+   ```bash
+   docker compose up -d webapi-classic atlas-classic
+   ```
+5. **Exit Verification**:
+   ```bash
+   # Verify WebAPI and Vocabulary search speed:
+   curl -s http://localhost:8080/WebAPI/info | jq .
+   docker exec -it ohdsi-postgres psql -U ohdsi_admin -d ohdsi -c \
+     "EXPLAIN ANALYZE SELECT * FROM vocab_54.concept WHERE concept_name ILIKE '%aspirin%' LIMIT 20;"
+   ```
+
+---
+
+### Phase 3: Compute Engine & Edge Ingress Routing
+
+1. **Deploy Dedicated R Server (`broadsea-hades`)**:
+   ```bash
+   docker compose up -d broadsea-hades
+   ```
+   *Verify R Server connects to both OMOP CDM and Vocabulary schemas via JDBC:*
+   ```bash
+   docker exec -it broadsea-hades Rscript -e "
+     library(DatabaseConnector)
+     conn <- connect(createConnectionDetails(
+       dbms = 'postgresql',
+       server = paste0(Sys.getenv('CDM_SERVER'), '/', Sys.getenv('CDM_DATABASE')),
+       user = Sys.getenv('CDM_USER'),
+       password = Sys.getenv('CDM_PASSWORD'),
+       pathToDriver = Sys.getenv('DATABASECONNECTOR_JAR_FOLDER')
+     ))
+     res <- querySql(conn, 'SELECT COUNT(*) FROM cdm_synthea100k.person;')
+     print(paste('Connected! Synthetic person count:', res[1,1]))
+     disconnect(conn)
+   "
+   ```
+2. **Deploy OHDSI Study Shiny Server**:
+   ```bash
+   docker compose up -d ohdsi-shiny
+   ```
+   *Mount directories: `/srv/shiny-server` (interactive apps) and `/srv/reports` (static HTML reports).*
+3. **Deploy Atlas 3.0 Next-Gen Frontend & WebAPI 3.0**:
+   ```bash
+   docker compose up -d atlas3-webapi atlas3-frontend atlas3-db-init
+   ```
+4. **Acquire TLS 1.3 Certificate & Start Nginx Ingress**:
+   ```bash
+   # Acquire Let's Encrypt certificate:
+   certbot certonly --webroot -w /var/www/certbot -d research.yourdomain.org --agree-tos --email devops@yourdomain.org
+   # Boot edge proxy:
+   docker compose up -d reverse-proxy certbot
+   ```
+5. **Exit Verification**:
+   ```bash
+   curl -I -k https://localhost/
+   curl -I -k https://localhost/atlas/
+   curl -I -k https://localhost/rstudio/
+   curl -I -k https://localhost/shiny/
+   ```
+
+---
+
+### Phase 4: Agentic Gateways, Developer Tooling & Handover Certification
+
+1. **Deploy Agentic Gateways & Federated Node**:
+   ```bash
+   docker compose up -d study-agent-mcp webapi-mcp arachne-data-node arachne-exec-engine ollama-service
+   ```
+2. **Deploy Developer Productivity Tools (Web SQL Studio & MinIO S3 Mock)**:
+   ```bash
+   docker compose up -d cloudbeaver-sql minio-s3
+   ```
+3. **Verify MCP Agent Tool Discovery**:
+   ```bash
+   # Test WebApiMcp tool registry:
+   curl -s -X POST https://research.yourdomain.org/webapi-mcp/mcp \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}' | jq .tools[].name
+
+   # Test StudyAgent FastMCP SSE stream:
+   curl -N -s https://research.yourdomain.org/mcp/sse -H "Authorization: Bearer <valid-token>" | head -n 5
+   ```
+4. **Test Sub-Minute Rollback Workflow**:
+   ```bash
+   # Create snapshot before testing:
+   sudo ohdsi-snapshot create test-handover-snap
+   # Test instant rollback:
+   sudo ohdsi-snapshot rollback test-handover-snap
+   # Remove test snapshot:
+   sudo ohdsi-snapshot delete test-handover-snap
+   ```
+5. **Execute Handover Certification**:
+   Run the 10-Point Handover Readiness Test from [DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md#5-the-10-point-handover-readiness-test).
+   When all 10 checks return `[ PASS ]`, email the handover card to the Data Science & Informatics leads.
+
+---
+
+## 3. Post-Handover Operations & Routine Maintenance
+
+- **Automated Certificate Renewal**: The `certbot` container checks and renews Let's Encrypt certificates every 12 hours automatically.
+- **Developer Package Compilations**: All R packages compile into the persistent `/home/ohdsi` volume; host containers do not need to be rebuilt when users install GitHub packages.
+- **Resource Monitoring**: Monitor container memory and PostgreSQL active queries via CloudBeaver (`/sql/`) or `docker stats`. If any container reaches its limit, cgroup memory clamping ensures it fails safely without host disruption.

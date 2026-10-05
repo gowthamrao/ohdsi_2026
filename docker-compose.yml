@@ -56,11 +56,14 @@ services:
         -c max_parallel_workers_per_gather=8
         -c max_parallel_maintenance_workers=8
         -c random_page_cost=1.1
+    shm_size: 16g
+    mem_limit: 48g
     restart: always
 
   # 3. WebAPI 2.14 Backend (Serving Atlas Classic)
   webapi-classic:
     image: ohdsi/webapi:2.14.0
+    mem_limit: 12g
     environment:
       DATASOURCE_URL: jdbc:postgresql://ohdsi-postgres:5432/ohdsi
       DATASOURCE_USERNAME: ${DB_APP_USER}
@@ -195,6 +198,8 @@ services:
     depends_on:
       - ohdsi-postgres
       - webapi-classic
+    shm_size: 16g
+    mem_limit: 48g
     restart: always
 
   # 10. OHDSI StudyAgent MCP Server (Port 8790: Model Context Protocol & BYO-Agent Gateway)
@@ -240,23 +245,76 @@ services:
       - broadsea_solr_data:/var/solr
     restart: always
 
-  # 11. OHDSI StudyAgent ACP Server (Port 8765: Agent Client Protocol & Study Design Flows)
-  study-agent-acp:
-    image: ohdsi/study-agent:latest
-    command: ["study-agent-acp-server", "--host", "0.0.0.0", "--port", "8765", "--config", "/app/config.yaml"]
+  # 11. WebApiMcp Bridge Server (schuemie/WebApiMcp: Port 8765)
+  webapi-mcp:
+    image: ghcr.io/schuemie/webapi-mcp:latest
+    container_name: webapi-mcp
     environment:
-      MCP_SERVER_URL: http://study-agent-mcp:8790/mcp
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OLLAMA_ENDPOINT: http://ollama-service:11434
-    volumes:
-      - ./studyagent/config.yaml:/app/config.yaml:ro
-      - /data/phenotype_index:/data/phenotype_index:ro
+      WEBAPI_MCP_WEBAPI_BASE_URL: http://webapi-classic:8080/WebAPI
+      WEBAPI_MCP_PORT: 8765
+      DEV_MODE: "true"
     ports:
       - "8765:8765"
     depends_on:
-      - study-agent-mcp
+      - webapi-classic
     restart: always
 
+  # 12. OHDSI Arachne Data Node & Federated Network Node (Port 8880)
+  arachne-data-node:
+    image: ohdsi/arachne-data-node:latest
+    container_name: arachne-data-node
+    environment:
+      CDM_SERVER: ohdsi-postgres
+      CDM_PORT: 5432
+      CDM_DATABASE: ohdsi
+      WEBAPI_URL: http://webapi-classic:8080/WebAPI
+    volumes:
+      - arachne_data:/var/arachne
+    ports:
+      - "8880:8880"
+    depends_on:
+      - ohdsi-postgres
+      - webapi-classic
+    restart: always
+
+  # 13. OHDSI Arachne Execution Engine (Port 8888, Internal Only)
+  arachne-exec-engine:
+    image: ohdsi/arachne-execution-engine:latest
+    container_name: arachne-exec-engine
+    environment:
+      ARACHNE_DATA_NODE_URL: http://arachne-data-node:8880
+    ports:
+      - "8888:8888"
+    depends_on:
+      - arachne-data-node
+    restart: always
+
+  # 14. CloudBeaver Web SQL IDE (Port 8978)
+  cloudbeaver-sql:
+    image: dbeaver/cloudbeaver:latest
+    container_name: cloudbeaver-sql
+    volumes:
+      - cloudbeaver_data:/opt/cloudbeaver/workspace
+    ports:
+      - "8978:8978"
+    depends_on:
+      - ohdsi-postgres
+    restart: always
+
+  # 15. MinIO S3 Object Store & Console (Ports 9000 & 9001)
+  minio-s3:
+    image: minio/minio:latest
+    container_name: minio-s3
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: always
 
 networks:
   ohdsi-net:
@@ -276,3 +334,9 @@ volumes:
     name: broadsea_hades_home
   broadsea_hades_tmp:
     name: broadsea_hades_tmp
+  arachne_data:
+    name: ohdsi_arachne_data
+  cloudbeaver_data:
+    name: ohdsi_cloudbeaver_data
+  minio_data:
+    name: ohdsi_minio_data

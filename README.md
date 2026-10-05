@@ -148,14 +148,14 @@ DevOps and infrastructure teams should reference the following dedicated specifi
 
 | Specification Document | Focus Area & Content |
 | :--- | :--- |
+| **[DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md)** | **Sandbox Handover & Quickstart Runbook**: Master handover card (URLs, default credentials), developer workspace provisioning, sub-minute break-and-restore CoW snapshot procedures, hammering guardrails, and 10-point handover test. |
+| **[ENGINEERING_EXECUTION_PLAN.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md)** | **DevOps Deployment Execution Runbook**: Step-by-step rollout sequence across 4 deployment phases with single-command verifications, snapshot rollback validation, and handover sign-off. |
+| **[STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md)** | **Authoritative System Requirements Specification (SRS)**: Complete RFC 2119 requirements (REQ-001 to REQ-053), acceptance criteria matrices (AC-001 to AC-053), and master sign-off checklist. |
 | **[ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md)** | **Architectural Review & Systems Engineering Assessment**: Analysis of developer hammering, CoW snapshot/rollback architecture, superuser privileges, and DevOps delivery contract. |
-| **[STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md)** | **Authoritative System Requirements Specification (SRS)**: Complete RFC 2119 requirements (REQ-001 to REQ-053), acceptance criteria matrices, and milestone sign-off checklists. |
 | **[OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md)** | **Hardware & Infrastructure Specification**: Compute, RAM, NVMe ZFS/Btrfs CoW mount, 64GB NVMe swap, cgroup memory clamping, network port rules, and 20-container roster. |
+| **[PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)** | **Ingress & Perimeter Guide**: Single public domain reverse proxy specification, subpath routing for all 10 services, TLS 1.3, automated Let's Encrypt renewals, Web SQL Studio, and MinIO S3 routing. |
 | **[AGENTIC_MCP_INTEGRATION_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENTIC_MCP_INTEGRATION_GUIDE.md)** | **Agentic Software & MCP Guide**: Configuration snippets for Claude Desktop, Cursor, Antigravity IDE, tool catalog, JSON-RPC schemas, and verification testing. |
-| **[ENGINEERING_EXECUTION_PLAN.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md)** | **DevOps Execution Runbook**: Step-by-step rollout sequence across the 5 stage gates with deterministic CLI / curl verification commands and snapshot rollback tests. |
 | **[DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md)** | **Architectural Decision Record (ADR)**: Justification for the Dedicated R Server model over fragmented microservices, including CDM and WebAPI connection code patterns. |
-| **[PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)** | **Ingress & Perimeter Guide**: Single public domain reverse proxy specification, subpath routing, TLS 1.3, automated Let's Encrypt renewals, Web SQL Studio, and MinIO S3 routing. |
-| **[DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md)** | **DevOps Onboarding**: System mental models, jargon translation rosetta stone, and operational best practices. |
 
 ---
 

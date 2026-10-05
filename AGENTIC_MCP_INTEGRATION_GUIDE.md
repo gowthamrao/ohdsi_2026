@@ -2,7 +2,8 @@
 
 > **Target Audience**: AI Engineers, Computational Phenotyping Leads, DevOps Engineers, Agent Developers  
 > **Supported Agents**: Claude Desktop, Cursor, Antigravity IDE, Cline, Roo-Code, AutoGen, CrewAI, LangGraph  
-> **Status**: Approved Production Specification
+> **Status**: Approved Production Specification  
+> **Cross-References**: [README.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/README.md) | [DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md) | [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md) | [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)
 
 ---
 

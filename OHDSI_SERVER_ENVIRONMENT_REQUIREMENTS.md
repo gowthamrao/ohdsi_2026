@@ -3,7 +3,8 @@
 > **Platform Mission**: High-Resilience Developer Sandbox for Innovating, Collaborating & Testing Latest Ideas in Clinical Informatics and Data Science  
 > **Target Audience**: Infrastructure Architects, DevOps/SRE Engineers, Cloud Systems Administrators  
 > **Platform Target**: Dedicated Bare-Metal Host (e.g. Hetzner AX/PX) or Cloud VM (AWS EC2 / Azure / GCP)  
-> **Status**: Approved Production Specification
+> **Status**: Approved Production Specification  
+> **Cross-References**: [README.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/README.md) | [DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md) | [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md) | [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)
 
 ---
 
@@ -123,13 +124,7 @@ Rather than deploying 15+ fragile Plumber microservices, all analytical R packag
 - **OHDSI Study Shiny Apps & Report Publishing**: The platform MUST support deploying interactive Shiny applications and published analytical reports from OHDSI studies (e.g. `CohortDiagnostics`, `CohortIncidence`, `Characterization`, `OhdsiShinyModules`, `ShinyAppBuilder`, [`ohdsi-studies/Taxis`](https://github.com/ohdsi-studies/Taxis)). Interactive dashboards are published to `/srv/shiny-server/` and accessible via public URL at `/shiny/`; static reports are published to `/srv/reports/` and accessible at `/reports/`.
 - **WebAPI Integration**: The R Server MUST have direct REST reachability to the WebAPI backend (`WEBAPI_URL`), allowing `ROhdsiWebApi` to import/export cohort definitions and concept sets.
 - **Passwordless Sudo for Developers**: The user `ohdsi` inside `broadsea-hades` is granted passwordless `sudo` to install dynamic C-dependencies and compile experimental R packages from GitHub without DevOps friction.
-- **Supported Package Suite**: The R Server MUST maintain pre-installed support for all official HADES packages and platform analytical libraries:
-  1. *Database & SQL*: `DatabaseConnector`, `SqlRender`, `ParallelLogger`, `Andromeda`.
-  2. *Cohort & Phenotyping*: `Capr`, `CirceR`, `CohortGenerator`, `CohortConstructor`, `PhenotypeLibrary`, `Phenotyper`, `Phenelope`, `PheValuator`, `Keeper`, `ProtocolGenerator`.
-  3. *Characterization & Diagnostics*: `CohortDiagnostics`, `CohortIncidence`, `FeatureExtraction`, `Characterization`, `ClinicalCharacteristics`, `DbDiagnostics`, `DataQualityDashboard`.
-  4. *Causal Estimation*: `CohortMethod`, `SelfControlledCaseSeries`, `Cyclops`, `EvidenceSynthesis`, `EmpiricalCalibration`, `MethodEvaluation`, `CaseControl`, `CaseCrossover`.
-  5. *Patient Prediction*: `PatientLevelPrediction`, `DeepPatientLevelPrediction`, `BigKnn`.
-  6. *Results & Studies*: `Strategus`, `ResultModelManager`, `ROhdsiWebApi`, `OhdsiShinyModules`, `ShinyAppBuilder`, `Eunomia`, `Taxis`.
+- **Supported Package Suite**: The R Server pre-installs all official HADES packages and analytical libraries across 6 functional domains (Database & SQL, Cohort & Phenotyping, Characterization & Diagnostics, Causal Estimation, Patient-Level Prediction, Results & Shiny). For the exhaustive package catalog, see [DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md) and [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md#stage-gate-2-data-scaling--dedicated-r-server).
 
 ---
 

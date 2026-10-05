@@ -3,7 +3,8 @@
 > **Production Specification for Hosting OHDSI on a Public URL Domain**  
 > **Target Audience**: DevOps Engineers, Site Reliability Engineers (SRE), Network Administrators  
 > **Applicable Environments**: Bare-Metal Dedicated (Hetzner, OVH) or Cloud VMs (AWS EC2, GCP, Azure)  
-> **Status**: Approved Production Standard
+> **Status**: Approved Production Standard  
+> **Cross-References**: [README.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/README.md) | [DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md) | [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md) | [ENGINEERING_EXECUTION_PLAN.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md)
 
 ---
 
@@ -261,8 +262,9 @@ curl -I -k https://research.yourdomain.org/s3/
 1. **Quarantine Internal Ports**:
    - Port `5432` (PostgreSQL), Port `8787` (RStudio), and Port `3838` (Shiny) must **never** be exposed directly on the public interface.
    - All client traffic MUST pass through the TLS 1.3 reverse proxy.
-2. **Small Cell Suppression (`MIN_CELL_COUNT >= 5`)**:
-   - Ensure privacy filters mask counts between 1 and 4 as `"< 5"` to comply with health data privacy regulations.
+2. **Small Cell Suppression Policy**:
+   - In this synthetic developer sandbox (no real patient PHI), Small Cell Suppression is configurable (`ENFORCE_SMALL_CELL_SUPPRESSION=false`) to allow researchers and AI agents to validate exact frequency distributions, test Capr cohort algorithms, and inspect raw attrition.
+   - For environments connected to real patient data, the filter is enabled (`MIN_CELL_COUNT >= 5`) to mask counts between 1 and 4 as `"< 5"`.
 3. **Automated Certificate Renewal**:
    - Certbot cron executes daily renewal checks:
      ```bash

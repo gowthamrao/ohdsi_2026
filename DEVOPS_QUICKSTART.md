@@ -1,117 +1,190 @@
-# DevOps Engineer Onboarding & Systems Quickstart Guide
+# DevOps Sandbox Delivery & Handover Runbook
 
-> **Repository Type**: Production Requirements & Acceptance Criteria Specification  
-> **Target Audience**: DevOps Engineers, SREs, Systems Architects, Infrastructure Leads  
-> **Status**: Approved Production Specification
-
----
-
-## 1. What is this System? (In Plain Software Terms)
-
-From an infrastructure and systems perspective, this repository specifies requirements for an **enterprise 3-tier analytical data platform**:
-
-1. **Database Tier (PostgreSQL 16)**:
-   - Houses a relational data warehouse with event tables (`person`, `visit_occurrence`, etc.).
-   - Contains a master dictionary table (`vocab_54`, ~10M rows) mapping foreign codes to primary keys.
-   - Contains a precomputed aggregate results cache (`results`) used to power instant UI graphs.
-2. **Backend & Compute Tier**:
-   - **WebAPI (Java 21 / Spring Boot 3)**: Main REST backend that compiles abstract JSON queries into vendor-specific SQL dialects. Connects to PostgreSQL via JDBC.
-   - **Dedicated R Server (`broadsea-hades`)**: Containerized RStudio Server & compute engine (port 8787) hosting all OHDSI R libraries natively. Connected directly to both the OMOP CDM database via JDBC and WebAPI via REST.
-   - **FastMCP Agent Gateway & Bridges**: Official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) (port 8790) and [`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp) (port 8765) exposing Model Context Protocol endpoints for agentic AI models (Claude, Cursor, Antigravity) to manage cohorts and query data safely.
-   - **OHDSI Arachne Data Node & Engine**: Distributed research node ([`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode) on port 8880) for federated network study execution.
-3. **Frontend & Ingress Tier**:
-   - **Atlas 3.0 (Vue 3 / TypeScript)** & **Atlas Classic**: Query builder web applications.
-   - **Nginx Reverse Proxy**: Enforces TLS 1.3, rate limits, single-domain path routing (`/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/reports/`, `/mcp/`, `/webapi-mcp/`, `/arachne/`), and data privacy filters (`MIN_CELL_COUNT=5`).
+> **Platform**: OHDSI Sandbox 2026 — High-Resilience Developer Playground for Data Science & Informatics  
+> **Target Audience**: DevOps Engineers, SREs, Systems Administrators, Data Science & Informatics Leads  
+> **Status**: Approved Operational Standard & Handover Protocol  
+> **Cross-References**: [README.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/README.md) | [ENGINEERING_EXECUTION_PLAN.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md) | [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md) | [OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md)
 
 ---
 
-## 2. The DevOps Rosetta Stone (Jargon Translation)
+## 1. Sandbox Purpose & Developer Handover Card
 
-| Domain Term | Standard Software Term | Technical Function |
-| :--- | :--- | :--- |
-| **OMOP CDM** | Relational Data Warehouse Schema | PostgreSQL database schema holding structured event records. |
-| **Athena / Vocabularies** | Master Lookup Dictionary (~10M rows) | Lookup table used for autocomplete and ID translation. Indexed with GIN (`pg_trgm`). |
-| **Source Daimon** | Database Schema Routing Config | A row in a config table telling WebAPI which schema is which (`cdm`, `vocab`, `results`). |
-| **WebAPI** | Java Spring Boot REST Backend | Exposes REST endpoints on port 8080. Connects to PostgreSQL via JDBC. |
-| **Atlas** | Analytics Web Application UI | Single-page app (Classic on port 8082; Atlas 3.0 on port 3000). |
-| **Dedicated R Server** | Dedicated R Compute Engine | Containerized RStudio Server (`broadsea-hades`, port 8787) hosting all OHDSI R packages. |
-| **Achilles** | Precomputed Aggregate Cache | Batch processing script that populates the `results` schema for instant dashboard retrieval. |
-| **Circe / Capr** | SQL Query Transpiler | Compiles JSON / R filter logic into database SQL. |
-| **Cohort / Phenotype** | Population Filter / Slice | A query returning matching entity IDs meeting certain conditions within a time range. |
-| **StudyAgent / MCP** | FastMCP Tool Server | Official container giving external AI agents access to database tools via MCP. |
-| **WebApiMcp** | WebAPI MCP Bridge Server | Dedicated MCP bridge ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp)) exposing cohort definitions and concept sets directly to LLMs. |
-| **Arachne** | Federated Research Network Node | Distributed study execution node ([`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode)) enabling multi-site studies with non-PHI aggregate export. |
-| **Small Cell Suppression** | Privacy Masking Filter | Middleware masking any count between 1 and 4 as `"< 5"` to prevent re-identification. |
+The **OHDSI Sandbox** is a dedicated developer playground where data scientists, clinical informaticians, phenotyping engineers, and AI researchers can innovate, collaborate, and test the latest ideas in observational research.
+
+- **Zero Real Person-Level Data**: The system connects exclusively to synthetic benchmark datasets (Eunomia, Synthea 100k, CMS SynPUF 2.3M) and standardized Athena Vocabularies (`vocab_54`, ~10M concepts).
+- **The Core Axiom**: **Developers WILL break things, and they must be encouraged to do so.** The architecture embraces failure as normal operation: enabling instant Copy-on-Write (CoW) snapshots, `< 30-second` rollbacks, developer superuser access, and strict container crash isolation.
+
+### The Master Handover Card (URLs, Credentials & Access)
+
+When delivering the sandbox to the Data Science and Informatics teams, provide this table:
+
+| Service Name | Public HTTPS URL | Default Credentials / Auth | Primary User & Purpose |
+| :--- | :--- | :--- | :--- |
+| **Atlas 3.0 Next-Gen** | `https://<domain>/` | Role: `admin` | Data Science: Modern Vue 3 cohort authoring & exploration. |
+| **Atlas Classic** | `https://<domain>/atlas/` | Role: `admin` | Informatics: Knockout.js cohort builder & vocabulary search. |
+| **WebAPI REST Engine** | `https://<domain>/WebAPI/info` | API Key / Bearer | Backend: SQL transpiler, source registry, and batch jobs. |
+| **Dedicated R Server** | `https://<domain>/rstudio/` | User: `ohdsi`<br>Pass: `${HADES_PASSWORD}` | Data Science: RStudio Server (HADES suite, passwordless sudo). |
+| **Study Shiny Apps** | `https://<domain>/shiny/` | Public / Open | Data Science: Interactive dashboards (`CohortDiagnostics`, `Taxis`). |
+| **Study Static Reports**| `https://<domain>/reports/` | Public / Open | Researchers: Quarto / RMarkdown analytical HTML reports. |
+| **WebApiMcp Bridge** | `https://<domain>/webapi-mcp/mcp` | Bearer Token / Open DEV | Agentic AI: Model Context Protocol bridge for cohort tools. |
+| **StudyAgent FastMCP** | `https://<domain>/mcp/sse` | Bearer Token / Open DEV | Agentic AI: FastMCP analytical queries & database tools. |
+| **Arachne Data Node** | `https://<domain>/arachne/` | User: `admin`<br>Pass: `Arachne123#` | Informatics: Federated study execution node & engine. |
+| **Web SQL Studio** | `https://<domain>/sql/` | User: `ohdsi_admin`<br>Pass: `${DB_ADMIN_PASS}` | Developers: Browser-based CloudBeaver SQL editor & ERDs. |
+| **MinIO S3 Mock** | `https://<domain>/s3/` | User: `minioadmin`<br>Pass: `${MINIO_ROOT_PASSWORD}`| Developers: S3 object storage for Strategus study artifacts. |
 
 ---
 
-## 3. Dedicated R Server Interconnectivity (OMOP CDM, Vocabularies & WebAPI)
+## 2. Developer Workspace & Access Provisioning
 
-The Dedicated R Server (`broadsea-hades`) connects directly to the OMOP CDM event tables, Athena Vocabularies, and the WebAPI backend:
+### A. PostgreSQL Superuser & Personal Scratch Schemas
+Developers have full superuser rights to create test tables, build indexes, and experiment freely:
+```sql
+-- Connect as ohdsi_admin to PostgreSQL:
+-- psql -h localhost -U ohdsi_admin -d ohdsi
 
-```r
-library(DatabaseConnector)
-library(ROhdsiWebApi)
+-- 1. Create personal scratch schema for each researcher:
+CREATE SCHEMA IF NOT EXISTS scratch_gowtham AUTHORIZATION ohdsi_admin;
 
-# 1. Connect to OMOP CDM and Athena Vocabularies
-connectionDetails <- createConnectionDetails(
-  dbms = "postgresql",
-  server = paste0(Sys.getenv("CDM_SERVER", "ohdsi-postgres"), "/", Sys.getenv("CDM_DATABASE", "ohdsi")),
-  user = Sys.getenv("CDM_USER", "ohdsi_app_user"),
-  password = Sys.getenv("CDM_PASSWORD")
-)
-
-conn <- connect(connectionDetails)
-# Query CDM clinical event tables
-querySql(conn, "SELECT COUNT(*) FROM cdm_synthea100k.person;")
-# Query standardized Athena Vocabularies
-querySql(conn, "SELECT COUNT(*) FROM vocab_54.concept;")
-disconnect(conn)
-
-# 2. Connect to WebAPI (shared with Atlas instance)
-webApiUrl <- Sys.getenv("WEBAPI_URL", "http://webapi-classic:8080/WebAPI")
-ROhdsiWebApi::getWebApiVersion(baseUrl = webApiUrl)
+-- 2. Grant full permissions on shared synthetic CDM and vocabulary:
+GRANT USAGE ON SCHEMA cdm_synthea100k TO ohdsi_admin;
+GRANT SELECT ON ALL TABLES IN SCHEMA cdm_synthea100k TO ohdsi_admin;
+GRANT USAGE ON SCHEMA vocab_54 TO ohdsi_admin;
+GRANT SELECT ON ALL TABLES IN SCHEMA vocab_54 TO ohdsi_admin;
 ```
-*For deep-dive architectural trade-offs, see [DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md).*
+
+### B. Dedicated R Server (`broadsea-hades`) Setup
+- **User Home Directory**: `/home/ohdsi` is mounted on a persistent Docker volume (`broadsea_hades_home`) backed by ZFS/Btrfs CoW storage.
+- **Passwordless Sudo**: The container user `ohdsi` is pre-configured with `NOPASSWD: ALL` in `/etc/sudoers.d/ohdsi`. Data scientists can install system C-dependencies (`sudo apt-get install -y libglpk-dev`) and compile packages from GitHub (`devtools::install_github(...)`) without submitting DevOps tickets.
+- **Connecting to CDM from R**:
+  ```r
+  library(DatabaseConnector)
+  conn <- connect(createConnectionDetails(
+    dbms = "postgresql",
+    server = paste0(Sys.getenv("CDM_SERVER", "ohdsi-postgres"), "/", Sys.getenv("CDM_DATABASE", "ohdsi")),
+    user = Sys.getenv("CDM_USER", "ohdsi_admin"),
+    password = Sys.getenv("CDM_PASSWORD"),
+    pathToDriver = Sys.getenv("DATABASECONNECTOR_JAR_FOLDER", "/opt/drivers")
+  ))
+  # Query synthetic CDM
+  person_count <- querySql(conn, "SELECT COUNT(*) FROM cdm_synthea100k.person;")
+  print(paste("Synthetic Person Count:", person_count[1,1]))
+  disconnect(conn)
+  ```
+
+### C. Deploying Interactive Shiny Apps & Reports
+- **Interactive Shiny Dashboards**: Developers publish Shiny apps simply by creating a directory under `/srv/shiny-server/<study_name>/` (e.g. `/srv/shiny-server/taxis/app.R`). The app is immediately live at `https://<domain>/shiny/taxis/`.
+- **Static Analytical Reports**: Pre-compiled Quarto or RMarkdown HTML reports placed in `/srv/reports/<study_name>/index.html` are instantly accessible at `https://<domain>/reports/<study_name>/`.
 
 ---
 
-## 4. The 5-Stage Gated Rollout
+## 3. The "Break & Restore" Operations (Core Sandbox Superpower)
 
-DevOps engineers must verify each stage gate sequentially:
+Data scientists and agentic AI loops will frequently attempt intensive operations, drop test tables, or corrupt schemas. The platform provides two tiers of instant restoration:
 
-- **Stage Gate 0**: Host & Kernel Hardening (Ubuntu 24.04 LTS, NVMe `noatime,nodiratime`, UFW firewall).
-- **Stage Gate 1**: Turnkey Broadsea Core (PostgreSQL, WebAPI Classic, Atlas Classic, Solr).
-- **Stage Gate 2**: High-Capacity Data, Dedicated R Server, Atlas & Shiny Apps (64GB shared buffers, full Athena vocab, Dedicated R Server connected to OMOP CDM and Vocabularies, Atlas connected to PostgreSQL via WebAPI, Shiny Server mounting study apps).
-- **Stage Gate 3**: Atlas 3.0 Next-Gen Frontend, WebAPI 3.0 & Public URL Ingress (single-domain routing under TLS 1.3 for `/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/reports/`, `/mcp/`, `/webapi-mcp/`, `/arachne/`).
-- **Stage Gate 4**: Sovereign Agentic Tier & Federated Network (hosted FastMCP via `OHDSI/StudyAgent`, `schuemie/WebApiMcp`, `OHDSI/ArachneDataNode`, local Ollama LLM, AST guardrails, and agentic client interoperability).
+### Tier 1: Sub-Minute CoW Filesystem Rollback (< 30 Seconds)
+The PostgreSQL data partition (`/var/lib/postgresql/data`) and R workspace (`/home/ohdsi`) reside on ZFS or Btrfs Copy-on-Write datasets.
 
-*Detailed requirements and acceptance criteria matrices: [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md).*
-
----
-
-## 5. Storage & Database Essentials
-
-### PostgreSQL 16 Memory Allocation
-Tuned for high-volume table scans:
-- **`shared_buffers`**: Allocate 25% of total system RAM (minimum 32GB, recommended 64GB).
-- **`work_mem`**: 256MB per operation.
-- **`maintenance_work_mem`**: 4GB for index builds and VACUUM.
-- **`effective_cache_size`**: 75% of total RAM.
-
-### NVMe Mount Point
-Mount your PostgreSQL data directory with `noatime,nodiratime` to reduce write wear during heavy analytical scans:
 ```bash
-mount -o noatime,nodiratime /dev/nvme0n1p3 /var/lib/postgresql/data
+# 1. Create a zero-cost snapshot before starting an experiment:
+sudo ohdsi-snapshot create "pre-experiment-$(date +%Y%m%d_%H%M)"
+
+# 2. List available snapshots:
+sudo ohdsi-snapshot list
+
+# 3. If an experiment breaks schemas or corrupts tables, restore instantly:
+sudo ohdsi-snapshot rollback "pre-experiment-20261005_1200"
+# -> Stops database container, rolls back ZFS dataset in < 2 seconds, restarts database (< 25s total)
+```
+
+### Tier 2: Golden Baseline Re-Seed (< 5 Minutes)
+If the database state is corrupted beyond a snapshot, reload the verified baseline seed containing Athena Vocabularies (`vocab_54` ~10M rows), Synthea 100k CDM, and initialized WebAPI source daimons:
+```bash
+docker compose exec db-manager /scripts/restore-golden-baseline.sh
 ```
 
 ---
 
-## 6. The 3 Golden Rules for Operations
+## 4. Hammering Absorption & Anti-Crash Guardrails
 
-1. **Quarantine Database & RStudio Ports**:
-   - Port `5432` (PostgreSQL) and Port `8787` (RStudio) must **never** be exposed directly to the public internet. Bind them to `127.0.0.1`, a private VPC subnet, or a VPN.
-2. **Enforce Small Cell Suppression (`MIN_CELL_COUNT >= 5`)**:
-   - Always ensure query filters and Nginx proxies mask counts between 1 and 4 as `"< 5"` to comply with health data privacy regulations.
-3. **Use the AST SQL Parser for AI Agents**:
-   - When external agents query the platform over MCP, route through the official StudyAgent container which parses SQL to prevent unaggregated extraction of raw identity tables.
+To protect the host from crashing when data scientists run multi-core causal inference pipelines or recursive SQL queries, DevOps configures three layers of defense:
+
+1. **Strict Container cgroup Memory Clamping**:
+   - `broadsea-hades` (R Server): `mem_limit: 48g`, `shm_size: 16g`
+   - `ohdsi-postgres` (Database): `mem_limit: 48g`, `shm_size: 16g`
+   - `webapi-classic` / `atlas3-webapi`: `mem_limit: 12g`
+   - **Protection Effect**: If a developer R script or AI agent triggers an out-of-memory error, the Linux kernel terminates *only that isolated R process*. Docker, PostgreSQL, and other developers remain completely unaffected.
+2. **Dedicated 64GB NVMe Swap**:
+   - Configured with `vm.swappiness = 10` on PCIe Gen4 NVMe to absorb momentary analytical memory spikes without abrupt kernel panics.
+3. **PostgreSQL Anti-Lock Guardrails (`postgresql.conf`)**:
+   - `statement_timeout = '15min'`: Automatically terminates runaway Cartesian joins (overridable per-session for authorized long-running batch studies).
+   - `idle_in_transaction_session_timeout = '10min'`: Automatically clears abandoned client sessions holding table locks.
+   - `temp_file_limit = '50GB'`: Prevents unindexed queries from consuming all available disk space.
+
+---
+
+## 5. The 10-Point Handover Readiness Test
+
+Before sending the handover email to the Data Science & Informatics leads, run this automated verification script from the host or an external workstation:
+
+```bash
+#!/usr/bin/env bash
+# OHDSI Sandbox Handover Verification Script
+set -euo pipefail
+DOMAIN="${1:-research.yourdomain.org}"
+echo "=== Verifying OHDSI Sandbox on https://${DOMAIN} ==="
+
+pass=0
+fail=0
+
+check() {
+  local name="$1"
+  local url="$2"
+  local match="$3"
+  printf "%-35s " "${name}..."
+  if curl -s -k -L "${url}" | grep -q "${match}"; then
+    echo "[ PASS ]"
+    pass=$((pass + 1))
+  else
+    echo "[ FAIL ] -> URL: ${url}"
+    fail=$((fail + 1))
+  fi
+}
+
+# 1. Atlas 3.0 Next-Gen Frontend
+check "Atlas 3.0 Frontend" "https://${DOMAIN}/" "html"
+
+# 2. Atlas Classic Frontend
+check "Atlas Classic Frontend" "https://${DOMAIN}/atlas/" "ATLAS"
+
+# 3. WebAPI Backend Info
+check "WebAPI REST Info" "https://${DOMAIN}/WebAPI/info" "version"
+
+# 4. Dedicated R Server (RStudio)
+check "RStudio Server Web IDE" "https://${DOMAIN}/rstudio/auth-sign-in" "RStudio"
+
+# 5. OHDSI Study Shiny Apps
+check "Study Shiny Server" "https://${DOMAIN}/shiny/" "Shiny"
+
+# 6. WebApiMcp Bridge
+check "WebApiMcp Bridge Server" "https://${DOMAIN}/webapi-mcp/health" "ok"
+
+# 7. StudyAgent FastMCP Gateway
+check "StudyAgent FastMCP Gateway" "https://${DOMAIN}/mcp/" ""
+
+# 8. Arachne Data Node
+check "Arachne Data Node" "https://${DOMAIN}/arachne/api/v1/build-number" "buildNumber"
+
+# 9. CloudBeaver Web SQL Studio
+check "CloudBeaver Web SQL" "https://${DOMAIN}/sql/" "CloudBeaver"
+
+# 10. MinIO S3 Console
+check "MinIO S3 Object Store" "https://${DOMAIN}/s3/" "MinIO"
+
+echo "=================================================="
+echo "Verification Complete: ${pass}/10 Passed, ${fail}/10 Failed"
+if [ "${fail}" -eq 0 ]; then
+  echo ">>> SUCCESS: OHDSI Sandbox is 100% Certified for Handover! <<<"
+else
+  echo ">>> ATTENTION: Resolve failed endpoints before handover. <<<"
+fi
+```

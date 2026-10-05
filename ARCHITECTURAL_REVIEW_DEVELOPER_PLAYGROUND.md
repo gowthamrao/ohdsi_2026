@@ -223,16 +223,18 @@ The following checklist defines what the DevOps team must provision and hand ove
 
 ---
 
-## 5. Architectural Recommendation & Action Plan
+## 5. Architectural Implementation Status
 
-1. **Codify Developer Playground Requirements** in [`STAGE_GATED_SPECIFICATIONS.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md):
-   - Add **REQ-049** (Fast Snapshot & Rollback Architecture).
-   - Add **REQ-050** (Developer & Admin Superuser Access Permissions).
-   - Add **REQ-051** (Agentic AI Testing Sandbox & Debug Telemetry).
-   - Add **REQ-052** (System Resilience, cgroups & Crash Isolation).
-   - Add **REQ-053** (Developer Tooling: Web SQL IDE & MinIO S3 Mock).
-2. **Update Container Roster & Ingress Specifications**:
-   - Include CloudBeaver (`cloudbeaver`) on port 8978 (`/sql/`).
-   - Include MinIO (`minio`) on port 9000/9001 (`/s3/`).
-   - Document ZFS/Btrfs CoW snapshot mount options in [`OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md).
-3. **Equip Developers with Instant Reset Scripts** in [`ENGINEERING_EXECUTION_PLAN.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md).
+1. **Codified Developer Playground Requirements** in [`STAGE_GATED_SPECIFICATIONS.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md):
+   - **REQ-049 / AC-049**: Fast Snapshot & Rollback Architecture (`< 30s` rollback via ZFS/Btrfs CoW).
+   - **REQ-050 / AC-050**: Developer Superuser & Admin Access Permissions (`ohdsi_admin`, RStudio sudo).
+   - **REQ-051 / AC-051**: Agentic AI Testing Sandbox & Verbose Debug Telemetry.
+   - **REQ-052 / AC-052**: System Resilience, cgroups & Crash Isolation (48GB limits, 64GB swap).
+   - **REQ-053 / AC-053**: Developer Tooling: CloudBeaver Web SQL IDE & MinIO S3 Mock.
+2. **Container Roster & Ingress Specifications** in [`OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md) and [`PUBLIC_DOMAIN_HOSTING_GUIDE.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md):
+   - CloudBeaver (`cloudbeaver-sql`) on port 8978 (`https://<domain>/sql/`).
+   - MinIO (`minio-s3`) on ports 9000/9001 (`https://<domain>/s3/`).
+   - ZFS/Btrfs CoW snapshot mount options and 64GB NVMe swap configuration.
+3. **Equipped DevOps & Developers with Handover Runbooks**:
+   - Master Handover Card & Break-and-Restore procedures in [`DEVOPS_QUICKSTART.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md).
+   - Linear 4-Phase Deployment Execution Runbook in [`ENGINEERING_EXECUTION_PLAN.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md).
