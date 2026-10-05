@@ -10,6 +10,13 @@
       "headers": {
         "Authorization": "Bearer ohdsi-admin-agent-token-2026"
       }
+    },
+    "r-tools": {
+      "command": "Rscript",
+      "args": [
+        "--vanilla",
+        "tools/server.R"
+      ]
     }
   },
   "inputs": []

@@ -198,3 +198,23 @@ The platform natively integrates the computational phenotyping skills authored b
 - **`phenotype-parent-concept`**: Uses `WebApiMcp` (`search_concepts`) to map internally deduced Umbrella Terms to Standard Concept IDs.
 
 *For complete architectural specifications, state machine definitions, and end-to-end walkthroughs, see [AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md).*
+
+---
+
+## 6. PhenotypingAgent Autonomous LangGraph Engine & Cohort Developer (Dr. Martijn Schuemie)
+
+The platform natively integrates the autonomous phenotyping engine and interactive cohort developer authored by **Dr. Martijn Schuemie** in [`schuemie/PhenotypingAgent`](https://github.com/schuemie/PhenotypingAgent):
+
+- **Interactive IDE Cohort Developer ([`.agents/skills/cohort-developer/SKILL.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/.agents/skills/cohort-developer/SKILL.md))**:
+  - Provides the `/cohort-developer` command in VS Code, Cursor, and Antigravity IDE.
+  - Implements a 3-Phase lifecycle: Phase 1 (Conceptual Design), Phase 2 (Implementation, Generation, and Attrition/Incidence Diagnostics), and Phase 3 (KEEPER Empirical Evaluation with strict 3-call cap).
+  - Adheres strictly to [`CAPR_REFERENCE.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/.agents/skills/cohort-developer/CAPR_REFERENCE.md).
+- **Autonomous Python LangGraph Engine ([`phenotyping_agent/`](file:///c:/files/git/github/ohdsi/ohdsi_2026/phenotyping_agent/))**:
+  - Compiles an autonomous 9-node LangGraph `StateGraph` (`intake`, `survey`, `design`, `write_capr`, `generate`, `measure`, `assess`, `evaluate`, `diagnose`, `report`).
+  - Supports two-tier models: Reasoning tier (`gpt-4o`, `claude-3-opus`, `o1`) for clinical design, expectation setting, and error diagnosis; Fast tier (`gpt-4o-mini`, `haiku`) for Capr codegen and narrative compilation; deterministic stubs for offline testing.
+- **The 12 OHDSI MCP Tools ([`tools/server.R`](file:///c:/files/git/github/ohdsi/ohdsi_2026/tools/server.R))**:
+  - Powered by local PostgreSQL OMOP CDM v5.4, Broadsea HADES, and the local Keeper service.
+  - AST security compilation sandbox (`tools/compileWorker.R`) prevents code injection during Capr cohort compilation.
+
+*For complete details, see [PHENOTYPING_AGENT_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PHENOTYPING_AGENT_SANDBOX_INTEGRATION.md).*
+

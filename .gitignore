@@ -27,3 +27,6 @@ Thumbs.db
 # Temporary files
 /SUPERVISOR_FEEDBACK.md
 /supervisor/
+/runs/
+/scratch/
+

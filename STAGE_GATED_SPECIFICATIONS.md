@@ -155,6 +155,11 @@ This document establishes the formal, binding technical requirements and verifia
     - Native support for the 4 core phenotyping skills: `clinical-definition-refiner`, `concept-set-target-enumerator`, `ohdsi-question-standardizer`, and `phenotype-parent-concept`.
     - Native integration of OHDSI Circe cohort directives (`.agents/context/ohdsi-cohorts.md`) and Pydantic study intent models (`.agents/schemas/study_intent.py`).
     - Direct binding of parent concept lookups and cohort definitions to sovereign sandbox MCP gateways (`WebApiMcp` on port 8765 and `StudyAgent FastMCP` on port 8790).
+16. **REQ-055 (PhenotypingAgent Autonomous LangGraph Engine & Cohort Developer Integration)**: The platform MUST natively support Dr. Martijn Schuemie's autonomous PhenotypingAgent framework ([`schuemie/PhenotypingAgent`](https://github.com/schuemie/PhenotypingAgent)):
+    - Python LangGraph autonomous phenotyping state machine (`phenotyping_agent/`) with two-tier LLM support (Reasoning tier for clinical design, hypothesis generation, and error diagnosis; Fast tier for Capr codegen and reporting; deterministic stubs for offline testing).
+    - Code-enforced scientific guardrails: expectation gating for all diagnostic calls, the 5-criterion Phase 2 to Phase 3 transition gate, anti-overfitting 3-call evaluation budget cap, and static concept-ID provenance checks.
+    - Interactive IDE cohort developer skill (`.agents/skills/cohort-developer/SKILL.md`) and Capr operational reference (`CAPR_REFERENCE.md`).
+    - The 12-tool MCP contract supported via sovereign R MCP server (`tools/server.R`, `compileWorker.R`) with AST sandboxing and PostgreSQL OMOP CDM v5.4 connectivity.
 
 #### B. Acceptance Criteria Matrix
 | Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
@@ -174,6 +179,7 @@ This document establishes the formal, binding technical requirements and verifia
 | **AC-052** | Crash Isolation & cgroups | Host enforces container memory limits and PostgreSQL timeouts under heavy hammering. | Trigger test memory-spike R process inside R Server (`matrix(rnorm(1e8), 1e4, 1e4)`) | Process terminated by cgroup OOM killer; PostgreSQL & Docker daemon remain 100% operational |
 | **AC-053** | Web SQL Studio & MinIO | CloudBeaver Web SQL IDE and MinIO S3 console operational over HTTPS. | `curl -s -k -I https://<domain>/sql/` & `curl -s -k -I https://<domain>/s3/` | HTTP 200/302 for both developer services |
 | **AC-054** | AgentPlayGround Skills | Workspace `.agents/skills/` contains the 4 phenotyping skills and connects to sandbox MCP tools (credited to Dr. Martijn Schuemie). | Test skill invocation: `/clinical-definition-refiner` & `/ohdsi-question-standardizer` | Interactive questionnaire engages; study intent validates against schema |
+| **AC-055** | PhenotypingAgent Engine | Autonomous LangGraph phenotyping engine and cohort-developer skill operational (credited to Dr. Martijn Schuemie). | `python -m pytest -q` & `python -m phenotyping_agent.cli run --clinical-definition "examples/acute_liver_failure.txt" --dry-run` | 100% pass across 80 tests; dry-run completes with action 'done' and PPV/Sens > 0.8; AST compile worker enforces allow-list |
 
 ---
 
@@ -227,3 +233,4 @@ DevOps engineers must audit and verify each criterion prior to final handover to
 - [ ] **AC-052**: System resilience verified: cgroup memory clamps and PostgreSQL timeouts isolate crashes.
 - [ ] **AC-053**: Developer Web SQL Studio (`/sql/`) and MinIO S3 object store (`/s3/`) verified.
 - [ ] **AC-054**: AgentPlayGround computational phenotyping skills operational in `.agents/` and bound to sandbox MCP tools (credited to Dr. Martijn Schuemie).
+- [ ] **AC-055**: PhenotypingAgent autonomous LangGraph engine and cohort-developer skill operational with 100% test pass and dry-run completion (credited to Dr. Martijn Schuemie).

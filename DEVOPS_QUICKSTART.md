@@ -32,6 +32,7 @@ When delivering the sandbox to the Data Science and Informatics teams, provide t
 | **Web SQL Studio** | `https://<domain>/sql/` | User: `ohdsi_admin`<br>Pass: `${DB_ADMIN_PASS}` | Developers: Browser-based CloudBeaver SQL editor & ERDs. |
 | **MinIO S3 Mock** | `https://<domain>/s3/` | User: `minioadmin`<br>Pass: `${MINIO_ROOT_PASSWORD}`| Developers: S3 object storage for Strategus study artifacts. |
 | **AgentPlayGround Skills** | Native in `.agents/skills/` | IDE Agent Commands | Data Science: 4 phenotyping skills by Dr. Martijn Schuemie (`/clinical-definition-refiner`, `/ohdsi-question-standardizer`, etc.). |
+| **PhenotypingAgent & Cohort Developer** | `phenotyping_agent/` & `.agents/skills/cohort-developer/` | CLI / IDE Command | Data Science & AI: Autonomous LangGraph phenotyping engine and `/cohort-developer` skill by Dr. Martijn Schuemie. |
 
 ---
 
@@ -83,6 +84,19 @@ The sandbox natively integrates Dr. Martijn Schuemie's [`schuemie/AgentPlayGroun
 - `/ohdsi-question-standardizer`: Translates research questions into formal OHDSI study templates.
 - `/phenotype-parent-concept`: Ontological umbrella term mapper using local `WebApiMcp`.
 - *For complete architectural and operational details, see [AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md).*
+
+### E. Autonomous LangGraph Phenotyping & Cohort Developer (Dr. Martijn Schuemie)
+The sandbox natively integrates Dr. Martijn Schuemie's [`schuemie/PhenotypingAgent`](https://github.com/schuemie/PhenotypingAgent) framework:
+- **Interactive Cohort Developer Skill**: Invoke `/cohort-developer #file:examples/acute_liver_failure.txt` in VS Code / Cursor / Antigravity IDE.
+- **Autonomous CLI Pipeline**: Run unattended LangGraph phenotyping state machine across phenotypes:
+  ```powershell
+  # Offline hermetic dry-run (verifies complete 9-node pipeline with stubs):
+  python -m phenotyping_agent.cli run --clinical-definition "examples/acute_liver_failure.txt" --dry-run
+  
+  # Run full automated test suite:
+  python -m pytest -q
+  ```
+- *For complete architectural and operational details, see [PHENOTYPING_AGENT_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PHENOTYPING_AGENT_SANDBOX_INTEGRATION.md).*
 
 ---
 
