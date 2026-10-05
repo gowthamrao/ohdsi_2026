@@ -150,7 +150,8 @@ DevOps and infrastructure teams should reference the following dedicated specifi
 | :--- | :--- |
 | **[DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md)** | **Sandbox Handover & Quickstart Runbook**: Master handover card (URLs, default credentials), developer workspace provisioning, sub-minute break-and-restore CoW snapshot procedures, hammering guardrails, and 10-point handover test. |
 | **[ENGINEERING_EXECUTION_PLAN.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md)** | **DevOps Deployment Execution Runbook**: Step-by-step rollout sequence across 4 deployment phases with single-command verifications, snapshot rollback validation, and handover sign-off. |
-| **[STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md)** | **Authoritative System Requirements Specification (SRS)**: Complete RFC 2119 requirements (REQ-001 to REQ-053), acceptance criteria matrices (AC-001 to AC-053), and master sign-off checklist. |
+| **[STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md)** | **Authoritative System Requirements Specification (SRS)**: Complete RFC 2119 requirements (REQ-001 to REQ-054), acceptance criteria matrices (AC-001 to AC-054), and master sign-off checklist. |
+| **[AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md)** | **AgentPlayGround Integration & Phenotyping Skills**: Full architectural guide lifting Dr. Martijn Schuemie's `AgentPlayGround` into the sandbox, detailing the 5-stage phenotyping pipeline and client configs. |
 | **[ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md)** | **Architectural Review & Systems Engineering Assessment**: Analysis of developer hammering, CoW snapshot/rollback architecture, superuser privileges, and DevOps delivery contract. |
 | **[OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md)** | **Hardware & Infrastructure Specification**: Compute, RAM, NVMe ZFS/Btrfs CoW mount, 64GB NVMe swap, cgroup memory clamping, network port rules, and 20-container roster. |
 | **[PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)** | **Ingress & Perimeter Guide**: Single public domain reverse proxy specification, subpath routing for all 10 services, TLS 1.3, automated Let's Encrypt renewals, Web SQL Studio, and MinIO S3 routing. |
@@ -159,15 +160,15 @@ DevOps and infrastructure teams should reference the following dedicated specifi
 
 ---
 
-## 6. Official Upstream Reference Repositories
+## 6. Official Upstream Reference Repositories & Author Attributions
 
-This specification directly references and relies upon official upstream OHDSI releases and container images:
+This specification directly references, integrates, and gratefully acknowledges the foundational work of the OHDSI community and lead authors:
 
-- **Broadsea Core**: [`OHDSI/Broadsea`](https://github.com/OHDSI/Broadsea) (Broadsea 3.5 deployment profile standards).
+- **AgentPlayGround**: [`schuemie/AgentPlayGround`](https://github.com/schuemie/AgentPlayGround) by **Dr. Martijn Schuemie** (Janssen R&D / OHDSI) — Author of the conversational phenotyping pipeline, clinical definition refiner, concept set target enumerator, question standardizer, and parent concept ontologist.
+- **WebApiMcp Bridge**: [`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp) by **Dr. Martijn Schuemie** — Dedicated Model Context Protocol server exposing WebAPI cohort definitions and vocabulary capabilities to LLMs.
+- **Broadsea Core**: [`OHDSI/Broadsea`](https://github.com/OHDSI/Broadsea) (Broadsea 3.5 deployment profile standards by Lee Evans and the Broadsea workgroup).
 - **StudyAgent FastMCP Gateway**: [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) (`ohdsi/study-agent:latest`).
-- **WebApiMcp Bridge**: [`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp) (Dedicated WebAPI MCP bridge server).
 - **OHDSI Arachne Data Node & Engine**: [`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode), [`OHDSI/ArachneExecutionEngine`](https://github.com/OHDSI/ArachneExecutionEngine), and [`OHDSI/ArachneCentral`](https://github.com/OHDSI/ArachneCentral).
-- **HADES Analytical Packages**: [`OHDSI/Hades`](https://github.com/OHDSI/Hades) (Pre-installed in `ohdsi/broadsea-hades:1.19.0`).
-- **WebAPI**: [`OHDSI/WebAPI`](https://github.com/OHDSI/WebAPI) (`ohdsi/webapi:2.14.0`).
-- **Atlas**: [`OHDSI/Atlas`](https://github.com/OHDSI/Atlas) (`ohdsi/atlas:2.14.0`).
-- **Network Studies**: [`ohdsi-studies/Taxis`](https://github.com/ohdsi-studies/Taxis) (Association mining engine).
+- **HADES Analytical Packages**: [`OHDSI/Hades`](https://github.com/OHDSI/Hades) (Lead: Martijn Schuemie; pre-installed in `ohdsi/broadsea-hades:1.19.0`).
+- **WebAPI & Atlas**: [`OHDSI/WebAPI`](https://github.com/OHDSI/WebAPI) and [`OHDSI/Atlas`](https://github.com/OHDSI/Atlas).
+- **Benchmark Network Studies**: [`ohdsi-studies/Taxis`](https://github.com/ohdsi-studies/Taxis) and [`examples/OHDSI treatment patterns 30nov2014.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/examples/OHDSI%20treatment%20patterns%2030nov2014.md) (Authors: Patrick Ryan, Jon Duke, Martijn Schuemie, George Hripcsak, Nigam Shah).

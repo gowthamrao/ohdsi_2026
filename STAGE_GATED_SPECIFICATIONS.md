@@ -151,6 +151,10 @@ This document establishes the formal, binding technical requirements and verifia
 14. **REQ-053 (Developer Web SQL Studio & MinIO S3 Object Store)**: The platform MUST provide browser-based developer tooling:
     - Containerized Web SQL Studio (`cloudbeaver:latest`) accessible at `https://<domain>/sql/` for instant schema inspection, visual explain plans, and query drafting.
     - Containerized S3-compatible object storage (`minio:latest`) accessible at `https://<domain>/s3/` for local Strategus study artifact storage, Parquet exports, and pipeline cache.
+15. **REQ-054 (AgentPlayGround Skills Integration & Computational Phenotyping Pipeline)**: The platform MUST natively support Dr. Martijn Schuemie's AgentPlayGround phenotyping framework ([`schuemie/AgentPlayGround`](https://github.com/schuemie/AgentPlayGround)) within the workspace `.agents` standard:
+    - Native support for the 4 core phenotyping skills: `clinical-definition-refiner`, `concept-set-target-enumerator`, `ohdsi-question-standardizer`, and `phenotype-parent-concept`.
+    - Native integration of OHDSI Circe cohort directives (`.agents/context/ohdsi-cohorts.md`) and Pydantic study intent models (`.agents/schemas/study_intent.py`).
+    - Direct binding of parent concept lookups and cohort definitions to sovereign sandbox MCP gateways (`WebApiMcp` on port 8765 and `StudyAgent FastMCP` on port 8790).
 
 #### B. Acceptance Criteria Matrix
 | Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
@@ -169,6 +173,7 @@ This document establishes the formal, binding technical requirements and verifia
 | **AC-051** | Agentic Sandbox Telemetry | MCP gateways return verbose JSON-RPC error telemetry and honor suppression bypass. | Submit malformed SQL to `/mcp/` and check debug output; toggle suppression flag | JSON-RPC returns detailed compiler traceback; unmasked counts returned |
 | **AC-052** | Crash Isolation & cgroups | Host enforces container memory limits and PostgreSQL timeouts under heavy hammering. | Trigger test memory-spike R process inside R Server (`matrix(rnorm(1e8), 1e4, 1e4)`) | Process terminated by cgroup OOM killer; PostgreSQL & Docker daemon remain 100% operational |
 | **AC-053** | Web SQL Studio & MinIO | CloudBeaver Web SQL IDE and MinIO S3 console operational over HTTPS. | `curl -s -k -I https://<domain>/sql/` & `curl -s -k -I https://<domain>/s3/` | HTTP 200/302 for both developer services |
+| **AC-054** | AgentPlayGround Skills | Workspace `.agents/skills/` contains the 4 phenotyping skills and connects to sandbox MCP tools (credited to Dr. Martijn Schuemie). | Test skill invocation: `/clinical-definition-refiner` & `/ohdsi-question-standardizer` | Interactive questionnaire engages; study intent validates against schema |
 
 ---
 
@@ -213,7 +218,7 @@ DevOps engineers must audit and verify each criterion prior to final handover to
 - [ ] **AC-043**: AST SQL guardrail blocks destructive queries and raw patient-level SELECTs.
 - [ ] **AC-044**: Small Cell Suppression verified (masking counts `< 5`, with configurable bypass for synthetic benchmarks).
 - [ ] **AC-045**: Local sovereign Ollama instance operational on port 11434.
-- [ ] **AC-046**: WebApiMcp bridge server operational on port 8765 connected to WebAPI.
+- [ ] **AC-046**: WebApiMcp bridge server operational on port 8765 connected to WebAPI (credited to Dr. Martijn Schuemie).
 - [ ] **AC-047**: OHDSI Arachne Data Node & Execution Engine operational on ports 8880/8888 and connected to OMOP CDM.
 - [ ] **AC-048**: Agentic software interoperability verified with MCP client (tool discovery and execution pass 100%).
 - [ ] **AC-049**: Fast snapshot and sub-minute rollback verified via ZFS/Btrfs CoW and golden baseline restore.
@@ -221,3 +226,4 @@ DevOps engineers must audit and verify each criterion prior to final handover to
 - [ ] **AC-051**: Agentic testing sandbox verified with verbose compiler tracebacks in JSON-RPC errors.
 - [ ] **AC-052**: System resilience verified: cgroup memory clamps and PostgreSQL timeouts isolate crashes.
 - [ ] **AC-053**: Developer Web SQL Studio (`/sql/`) and MinIO S3 object store (`/s3/`) verified.
+- [ ] **AC-054**: AgentPlayGround computational phenotyping skills operational in `.agents/` and bound to sandbox MCP tools (credited to Dr. Martijn Schuemie).

@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "ohdsi_webapi_mcp": {
+      "url": "http://localhost:8765/mcp",
+      "type": "http"
+    },
+    "ohdsi_study_agent": {
+      "url": "http://localhost:8790/mcp/sse",
+      "type": "http",
+      "headers": {
+        "Authorization": "Bearer ohdsi-admin-agent-token-2026"
+      }
+    }
+  },
+  "inputs": []
+}

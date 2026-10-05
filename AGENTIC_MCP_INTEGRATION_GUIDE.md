@@ -3,7 +3,7 @@
 > **Target Audience**: AI Engineers, Computational Phenotyping Leads, DevOps Engineers, Agent Developers  
 > **Supported Agents**: Claude Desktop, Cursor, Antigravity IDE, Cline, Roo-Code, AutoGen, CrewAI, LangGraph  
 > **Status**: Approved Production Specification  
-> **Cross-References**: [README.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/README.md) | [DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md) | [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md) | [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)
+> **Cross-References**: [README.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/README.md) | [DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md) | [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md) | [AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md) | [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)
 
 ---
 
@@ -185,3 +185,16 @@ curl -N -s https://research.yourdomain.org/mcp/sse \
 ```bash
 npx @modelcontextprotocol/inspector https://research.yourdomain.org/webapi-mcp/mcp
 ```
+
+---
+
+## 5. AgentPlayGround Computational Phenotyping Skills Integration (Dr. Martijn Schuemie)
+
+The platform natively integrates the computational phenotyping skills authored by **Dr. Martijn Schuemie** in [`schuemie/AgentPlayGround`](https://github.com/schuemie/AgentPlayGround) within the workspace [`.agents/skills/`](file:///c:/files/git/github/ohdsi/ohdsi_2026/.agents/skills/):
+
+- **`clinical-definition-refiner`**: Guides researchers through iterative pathophysiological definition formulation without code pollution.
+- **`concept-set-target-enumerator`**: Enumerates boundary-defining targets across 6 clinical categories (`Symptom`, `Drug`, `Diagnostic procedure`, `Treatment procedure`, `Measurement`, `Alternative diagnosis`).
+- **`ohdsi-question-standardizer`**: Translates natural research questions or markdown study protocols into formal OHDSI analytical templates validating against Pydantic models (`study_intent.py`).
+- **`phenotype-parent-concept`**: Uses `WebApiMcp` (`search_concepts`) to map internally deduced Umbrella Terms to Standard Concept IDs.
+
+*For complete architectural specifications, state machine definitions, and end-to-end walkthroughs, see [AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md).*

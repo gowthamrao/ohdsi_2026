@@ -26,11 +26,12 @@ When delivering the sandbox to the Data Science and Informatics teams, provide t
 | **Dedicated R Server** | `https://<domain>/rstudio/` | User: `ohdsi`<br>Pass: `${HADES_PASSWORD}` | Data Science: RStudio Server (HADES suite, passwordless sudo). |
 | **Study Shiny Apps** | `https://<domain>/shiny/` | Public / Open | Data Science: Interactive dashboards (`CohortDiagnostics`, `Taxis`). |
 | **Study Static Reports**| `https://<domain>/reports/` | Public / Open | Researchers: Quarto / RMarkdown analytical HTML reports. |
-| **WebApiMcp Bridge** | `https://<domain>/webapi-mcp/mcp` | Bearer Token / Open DEV | Agentic AI: Model Context Protocol bridge for cohort tools. |
+| **WebApiMcp Bridge** | `https://<domain>/webapi-mcp/mcp` | Bearer Token / Open DEV | Agentic AI: Model Context Protocol bridge for cohort tools ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp) by Dr. Martijn Schuemie). |
 | **StudyAgent FastMCP** | `https://<domain>/mcp/sse` | Bearer Token / Open DEV | Agentic AI: FastMCP analytical queries & database tools. |
 | **Arachne Data Node** | `https://<domain>/arachne/` | User: `admin`<br>Pass: `Arachne123#` | Informatics: Federated study execution node & engine. |
 | **Web SQL Studio** | `https://<domain>/sql/` | User: `ohdsi_admin`<br>Pass: `${DB_ADMIN_PASS}` | Developers: Browser-based CloudBeaver SQL editor & ERDs. |
 | **MinIO S3 Mock** | `https://<domain>/s3/` | User: `minioadmin`<br>Pass: `${MINIO_ROOT_PASSWORD}`| Developers: S3 object storage for Strategus study artifacts. |
+| **AgentPlayGround Skills** | Native in `.agents/skills/` | IDE Agent Commands | Data Science: 4 phenotyping skills by Dr. Martijn Schuemie (`/clinical-definition-refiner`, `/ohdsi-question-standardizer`, etc.). |
 
 ---
 
@@ -74,6 +75,14 @@ GRANT SELECT ON ALL TABLES IN SCHEMA vocab_54 TO ohdsi_admin;
 ### C. Deploying Interactive Shiny Apps & Reports
 - **Interactive Shiny Dashboards**: Developers publish Shiny apps simply by creating a directory under `/srv/shiny-server/<study_name>/` (e.g. `/srv/shiny-server/taxis/app.R`). The app is immediately live at `https://<domain>/shiny/taxis/`.
 - **Static Analytical Reports**: Pre-compiled Quarto or RMarkdown HTML reports placed in `/srv/reports/<study_name>/index.html` are instantly accessible at `https://<domain>/reports/<study_name>/`.
+
+### D. Computational Phenotyping & AgentPlayGround Skills (Dr. Martijn Schuemie)
+The sandbox natively integrates Dr. Martijn Schuemie's [`schuemie/AgentPlayGround`](https://github.com/schuemie/AgentPlayGround) skills within the workspace [`.agents/skills/`](file:///c:/files/git/github/ohdsi/ohdsi_2026/.agents/skills/). Data scientists, informaticians, and external AI agents (Antigravity IDE, Cursor, GitHub Copilot, Claude Desktop) can immediately invoke:
+- `/clinical-definition-refiner`: Conversational clinical concept refiner.
+- `/concept-set-target-enumerator`: 6-category boundary-defining concept target enumerator.
+- `/ohdsi-question-standardizer`: Translates research questions into formal OHDSI study templates.
+- `/phenotype-parent-concept`: Ontological umbrella term mapper using local `WebApiMcp`.
+- *For complete architectural and operational details, see [AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENT_PLAYGROUND_SANDBOX_INTEGRATION.md).*
 
 ---
 
