@@ -225,6 +225,23 @@ To a systems or DevOps engineer, the platform is a standard **3-tier data wareho
    - **Client Configuration Artifacts**: Standard `mcpServers` JSON connection definitions MUST be provided for both StudyAgent and WebApiMcp.
    - **Tool Schema Discoverability**: Tools MUST expose self-describing JSON Schema parameter definitions for cohort management (`list_cohort_definitions`, `get_cohort_definition`, `generate_cohort`), concept exploration (`search_concepts`, `get_concept_set`), and CDM database queries with small-cell privacy guards.
    - **Edge Gateway Streaming**: The Nginx reverse proxy MUST explicitly disable proxy buffering (`proxy_buffering off`), disable chunking delays, and pass `text/event-stream` headers without timeout truncation to maintain active persistent sessions with agentic runtimes.
+10. **REQ-049 (Fast Storage Snapshot & Rollback Architecture)**: The host environment MUST implement filesystem-level Copy-on-Write (CoW) snapshots (ZFS or Btrfs) for the PostgreSQL data directory (`/var/lib/postgresql/data`) and R workspace volume (`/home/ohdsi`), providing sub-minute rollback capability when experimentation corrupts databases or schemas. Additionally, a compressed golden baseline dump (`cdm_golden_baseline.dump.gz`) MUST be maintained in `/opt/ohdsi/seeds/` with an automated restoration script restoring the baseline in `< 5 minutes`.
+11. **REQ-050 (Developer Superuser & Admin Access Permissions)**: The platform MUST grant full superuser and administrative privileges to data science and informatics researchers:
+    - Dedicated PostgreSQL superuser credentials (`ohdsi_admin` with `SUPERUSER`, `CREATEDB`, `CREATEROLE`) and private scratch schemas (`scratch_<username>`).
+    - Passwordless `sudo` inside the Dedicated R Server (`broadsea-hades`) allowing dynamic OS package installations (`apt-get install`) and GitHub package compilations.
+    - Global administrator role in Atlas and WebAPI for custom Source Daimon management and cohort generation queue control.
+    - Direct SSH and VS Code Remote Containers integration into compute containers.
+12. **REQ-051 (Agentic AI Testing Sandbox & Verbose Debug Telemetry)**: The MCP gateways MUST support high-concurrency automated agentic execution:
+    - Pre-configured Developer Mode (`DEV_MODE=true`) permitting pre-shared developer keys or local loopback authentication.
+    - Verbose compiler and AST error payloads returned in JSON-RPC responses when SQL transpilation fails, enabling autonomous LLMs to self-correct during experiment loops.
+    - Configurable Small Cell Suppression (`ENFORCE_SMALL_CELL_SUPPRESSION=false`) for benchmark/synthetic datasets so developers can inspect raw patient count distributions without masking.
+13. **REQ-052 (System Resilience, cgroups & Crash Isolation)**: The host and container runtime MUST withstand aggressive developer and agent hammering without taking down host or database services:
+    - Strict cgroup memory clamping on compute containers (`broadsea-hades`: `mem_limit: 48g`, `shm_size: 16g`; `ohdsi-postgres`: `mem_limit: 48g`).
+    - Dedicated 32 GB–64 GB swap partition on NVMe PCIe Gen4 storage with `vm.swappiness = 10` to absorb sudden analytical memory spikes without kernel panics.
+    - PostgreSQL query guardrails: `statement_timeout = '15min'` (overridable per-session for long batch studies), `idle_in_transaction_session_timeout = '10min'` to prevent abandoned zombie locks, and `temp_file_limit = '50GB'` to prevent disk exhaustion.
+14. **REQ-053 (Developer Web SQL Studio & MinIO S3 Object Store)**: The platform MUST provide browser-based developer tooling:
+    - Containerized Web SQL Studio (`cloudbeaver:latest` or `pgadmin4`) accessible at `https://<domain>/sql/` for instant schema inspection, visual explain plans, and query drafting.
+    - Containerized S3-compatible object storage (`minio:latest`) accessible at `https://<domain>/s3/` for local Strategus study artifact storage, Parquet exports, and pipeline cache.
 
 #### B. Acceptance Criteria Matrix
 | Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
@@ -238,6 +255,11 @@ To a systems or DevOps engineer, the platform is a standard **3-tier data wareho
 | **AC-046** | WebApiMcp Bridge | WebApiMcp server operational on port 8765 and routes to WebAPI. | `curl -s http://localhost:8765/health` & MCP handshake at `/webapi-mcp/mcp` | HTTP 200 with healthy status; tools list returns cohort and concept set capabilities |
 | **AC-047** | Arachne Data Node | Arachne Data Node & Execution Engine operational and connected to CDM. | `curl -s http://localhost:8880/api/v1/build-number` & Execution Engine ping | HTTP 200 with Data Node build info; status healthy |
 | **AC-048** | Agentic Client Interop | Standard MCP client (Claude/Cursor/Antigravity) connects, discovers tools, and executes queries. | Connect MCP client via SSE/HTTP and invoke `list_sources` or `search_concepts` | Successful JSON-RPC handshake; valid tool response returned |
+| **AC-049** | Fast Snapshot & Rollback | CoW storage snapshot created and restored in `< 60s`; golden baseline restore verified. | Run `ohdsi-snapshot create test-snap && ohdsi-snapshot rollback test-snap` | Sub-minute rollback success; CDM tables intact |
+| **AC-050** | Developer Admin Access | Developers authenticate as PostgreSQL superuser, RStudio sudo, and Atlas admin. | `psql -U ohdsi_admin -c "SELECT rolsuper FROM pg_roles WHERE rolname='ohdsi_admin'"` & `docker exec -it broadsea-hades sudo whoami` | Returns `true` for superuser; returns `root` for RStudio sudo |
+| **AC-051** | Agentic Sandbox Telemetry | MCP gateways return verbose JSON-RPC error telemetry and honor suppression bypass. | Submit malformed SQL to `/mcp/` and check debug output; toggle suppression flag | JSON-RPC returns detailed compiler traceback; unmasked counts returned |
+| **AC-052** | Crash Isolation & cgroups | Host enforces container memory limits and PostgreSQL timeouts under heavy hammering. | Trigger test memory-spike R process inside R Server (`matrix(rnorm(1e8), 1e4, 1e4)`) | Process terminated by cgroup OOM killer; PostgreSQL & Docker daemon remain 100% operational |
+| **AC-053** | Web SQL Studio & MinIO | CloudBeaver Web SQL IDE and MinIO S3 console operational over HTTPS. | `curl -s -k -I https://<domain>/sql/` & `curl -s -k -I https://<domain>/s3/` | HTTP 200/302 for both developer services |
 
 ---
 
@@ -275,13 +297,18 @@ DevOps engineers must audit and verify each stage gate prior to production sign-
 - [ ] **AC-033**: Single unified public domain routing verified for all endpoints.
 - [ ] **AC-034**: OHDSI Study Shiny apps and published reports accessible via public URL (`/shiny/`, `/reports/`).
 
-### Stage Gate 4: Sovereign Agentic Tier (MCP & BYO-Agent) & Federated Research Network
+### Stage Gate 4: Sovereign Agentic Tier, Federated Network & Developer Playground
 - [ ] **AC-040**: Official `ohdsi/study-agent:latest` image running from `OHDSI/StudyAgent`.
 - [ ] **AC-041**: MCP endpoints `/mcp/sse` and `/mcp/messages` operational with live SSE stream.
 - [ ] **AC-042**: Scoped Bearer authentication enforced; 401 returned on invalid/missing tokens.
 - [ ] **AC-043**: AST SQL guardrail blocks destructive queries and raw patient-level SELECTs.
-- [ ] **AC-044**: Small Cell Suppression verified: cell counts `< 5` masked across all queries.
+- [ ] **AC-044**: Small Cell Suppression verified: cell counts `< 5` masked across all queries (configurable for synthetic benchmarks).
 - [ ] **AC-045**: Local sovereign Ollama instance operational on port 11434.
 - [ ] **AC-046**: WebApiMcp bridge server operational on port 8765 connected to WebAPI.
 - [ ] **AC-047**: OHDSI Arachne Data Node & Execution Engine operational on ports 8880/8888 and connected to OMOP CDM.
 - [ ] **AC-048**: Agentic software interoperability verified with MCP client (tool discovery and execution pass 100%).
+- [ ] **AC-049**: Fast snapshot and sub-minute rollback verified via ZFS/Btrfs CoW and golden baseline restore.
+- [ ] **AC-050**: Developer superuser credentials, RStudio sudo, and Atlas admin roles verified.
+- [ ] **AC-051**: Agentic testing sandbox verified with verbose compiler tracebacks in JSON-RPC errors.
+- [ ] **AC-052**: System resilience verified: cgroup memory clamps and PostgreSQL timeouts isolate crashes.
+- [ ] **AC-053**: Developer Web SQL Studio (`/sql/`) and MinIO S3 object store (`/s3/`) verified.

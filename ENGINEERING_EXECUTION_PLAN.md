@@ -122,14 +122,14 @@ This runbook guides DevOps engineers step-by-step from bare-metal host provision
    curl -I -k https://<domain>/reports/
    ```
 
-### Stage Gate 4: Sovereign Agentic Tier (Hosted FastMCP & BYO-Agent) & Federated Network
-1. Launch the official StudyAgent MCP container, WebApiMcp bridge server, Arachne node, and local Ollama inference:
+### Stage Gate 4: Sovereign Agentic Tier, Federated Network & Developer Playground
+1. Launch the agentic AI gateways, Arachne federated node, and developer sandbox tools:
    ```bash
-   docker compose up -d study-agent-mcp webapi-mcp arachne-data-node arachne-exec-engine ollama-service
+   docker compose up -d study-agent-mcp webapi-mcp arachne-data-node arachne-exec-engine ollama-service cloudbeaver-sql minio-s3
    ```
 2. Test MCP agent connectivity and tool discovery:
    ```bash
-   # Test StudyAgent MCP endpoint
+   # Test StudyAgent MCP endpoint (SSE stream)
    curl -s -k https://<domain>/mcp/sse -H "Authorization: Bearer <token>"
 
    # Test WebApiMcp bridge server health and tool discovery
@@ -138,6 +138,25 @@ This runbook guides DevOps engineers step-by-step from bare-metal host provision
 3. Test Arachne Federated Data Node status:
    ```bash
    curl -s -k https://<domain>/arachne/api/v1/build-number | jq .
+   ```
+4. Verify Developer Tooling (Web SQL Studio & MinIO S3 Object Store):
+   ```bash
+   # Test CloudBeaver Web SQL Studio
+   curl -I -k https://<domain>/sql/
+
+   # Test MinIO S3 Console
+   curl -I -k https://<domain>/s3/
+   ```
+5. Test Fast Snapshot & Sub-Minute Rollback:
+   ```bash
+   # Create a test CoW snapshot before experimentation:
+   sudo ohdsi-snapshot create test-pre-experiment
+
+   # Verify snapshot listing:
+   sudo ohdsi-snapshot list
+
+   # Test instant rollback (< 30 seconds):
+   sudo ohdsi-snapshot rollback test-pre-experiment
    ```
 
 ---

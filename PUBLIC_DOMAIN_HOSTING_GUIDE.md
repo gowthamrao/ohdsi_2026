@@ -49,6 +49,8 @@ Every component of the OHDSI research environment is unified under **ONE public 
 | **`/mcp/`** | StudyAgent FastMCP Gateway | Port 8790 | Server-Sent Events (SSE) and HTTP JSON-RPC for external AI models. |
 | **`/webapi-mcp/`** | WebApiMcp Bridge Server | Port 8765 | Dedicated WebAPI MCP gateway ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp)) with streaming JSON-RPC. |
 | **`/arachne/`** | OHDSI Arachne Data Node | Port 8880 | Federated research network management interface & execution dispatch ([`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode)). |
+| **`/sql/`** | CloudBeaver Web SQL Studio | Port 8978 | Browser-based SQL editor, visual explain plans, table autocomplete, and schema ERDs. |
+| **`/s3/`** | MinIO S3 Object Store Console | Port 9001 | Local S3 bucket console for Strategus study packages, Parquet data exports, and artifacts. |
 
 ---
 
@@ -56,8 +58,8 @@ Every component of the OHDSI research environment is unified under **ONE public 
 
 | Model | Setup Complexity | DNS Requirement | Recommended Use Case |
 | :--- | :--- | :--- | :--- |
-| **Model A: Single-Domain Path-Based Routing** *(Recommended)* | **Lowest** (1 SSL cert, 1 DNS entry) | Single `A` Record (`research.yourdomain.org`) | **Standard Production**: All tools accessible under unified prefix (`/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/mcp/`, `/webapi-mcp/`, `/arachne/`). |
-| **Model B: Subdomain-Based Routing** | Medium (Wildcard or multiple certs) | Multiple CNAMEs (`atlas.*`, `webapi.*`, `rstudio.*`, `shiny.*`, `arachne.*`) | Enterprise portals requiring independent domain isolation. |
+| **Model A: Single-Domain Path-Based Routing** *(Recommended)* | **Lowest** (1 SSL cert, 1 DNS entry) | Single `A` Record (`research.yourdomain.org`) | **Standard Sandbox**: All tools accessible under unified prefix (`/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/mcp/`, `/webapi-mcp/`, `/arachne/`, `/sql/`, `/s3/`). |
+| **Model B: Subdomain-Based Routing** | Medium (Wildcard or multiple certs) | Multiple CNAMEs (`atlas.*`, `webapi.*`, `rstudio.*`, `shiny.*`, `sql.*`, `s3.*`) | Enterprise portals requiring independent domain isolation. |
 
 ---
 
@@ -190,6 +192,26 @@ server {
         proxy_set_header X-Forwarded-Proto https;
         proxy_read_timeout 1800s;
     }
+
+    # 9. CloudBeaver Web SQL Studio
+    location /sql/ {
+        proxy_pass http://cloudbeaver-sql:8978/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 1800s;
+    }
+
+    # 10. MinIO S3 Object Store Console & API
+    location /s3/ {
+        proxy_pass http://minio-s3:9001/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 1800s;
+    }
 }
 ```
 
@@ -224,6 +246,12 @@ curl -s -k https://research.yourdomain.org/webapi-mcp/health | jq .
 
 # 8. Verify Arachne Data Node build / status
 curl -s -k https://research.yourdomain.org/arachne/api/v1/build-number | jq .
+
+# 9. Verify Web SQL Studio (CloudBeaver)
+curl -I -k https://research.yourdomain.org/sql/
+
+# 10. Verify MinIO S3 Console
+curl -I -k https://research.yourdomain.org/s3/
 ```
 
 ---

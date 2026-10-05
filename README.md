@@ -1,27 +1,31 @@
-# OHDSI 2026: DevOps Platform Requirements & Acceptance Criteria Specification
+# OHDSI Sandbox 2026: DevOps Platform Requirements & Acceptance Criteria Specification
 
+> **Platform Mission**: High-Resilience Developer Sandbox for Innovating, Collaborating & Testing Latest Ideas in Healthcare Informatics and Data Science  
 > **Repository Type**: Production System Requirements Specification (SRS) & Stage-Gated Acceptance Criteria (AC)  
-> **Target Audience**: Cloud DevOps Engineers, Site Reliability Engineers (SRE), Infrastructure Architects, Database Administrators  
+> **Target Audience**: Cloud DevOps Engineers, Site Reliability Engineers (SRE), Infrastructure Architects, Data Science & Informatics Leads  
 > **Platform Target**: Dedicated Bare-Metal Host (Hetzner AX/PX) or Cloud VPC (AWS / GCP / Azure)  
-> **Status**: Approved Production Standard
+> **Status**: Approved Production Specification
 
 ---
 
-## 1. Repository Purpose & Scope
+## 1. Repository Purpose & Scope: The OHDSI Sandbox
 
 This repository is **strictly a requirements and acceptance criteria specification repository** for platform engineering and DevOps teams.
 
-It is **NOT an implementation code repository**:
-- **No Terraform or Cloud-Specific IaC**: Cloud infrastructure provisioning is implemented by downstream DevOps teams in their respective enterprise Terraform, OpenTofu, or Pulumi repositories based on the specifications defined here.
-- **No Test Suites or Pytest Code**: Testing and automated CI/CD runners belong to downstream implementation pipelines; acceptance criteria in this repository are specified as deterministic verification commands (HTTP status codes, CLI checks, SQL explain plans, and sign-off checklists).
-- **No Fragmented Microservices**: Bespoke custom Plumber R microservices and duplicate wrapper code have been completely eliminated in favor of official OHDSI upstream container standards.
-- **Dedicated R Server Architecture**: Analytical R packages run inside a single containerized R Server (`broadsea-hades` / RStudio Server), which is directly connected to the shared OMOP CDM database and WebAPI backend.
+It specifies how DevOps must build, harden, and maintain the **OHDSI Sandbox**—a shared developer playground where data scientists, clinical informaticians, and AI researchers can innovate, collaborate, and test the latest ideas in observational research:
+
+- **An Open Developer Playground**: Designed to withstand the aggressive "hammering" of data science and informatics developer teams—massive recursive SQL queries, multi-core HADES causal inference pipelines, rapid iterative Shiny app development, and high-frequency multi-agent LLM tool loops.
+- **Zero Real Person-Level Data**: The environment connects exclusively to synthetic, benchmark, and simulated datasets (Eunomia, Synthea 100k, CMS SynPUF 2.3M, OMOP CDM v5.4 sample benchmarks) and Athena Vocabularies. Developers have freedom to inspect raw counts without privacy restrictions.
+- **Break It and Restore It (Sub-Minute Rollbacks)**: Failure is embraced as normal experimentation. The platform implements Copy-on-Write (CoW) filesystem snapshots (ZFS or Btrfs) enabling instant `< 60-second` rollbacks (`ohdsi-snapshot rollback`) and a pre-seeded golden baseline dump (`cdm_golden_baseline.dump.gz`) restored in `< 5 minutes`.
+- **Developer Superuser & Admin Access**: Developers receive PostgreSQL superuser credentials (`ohdsi_admin`), passwordless `sudo` in the Dedicated R Server (`broadsea-hades`), and global administrator privileges in Atlas and WebAPI.
+- **Agentic AI Testbed**: Pre-configured dual MCP gateways ([`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) and [`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp)) with verbose debug telemetry, enabling external AI agents (Claude, Cursor, Antigravity) to self-correct during automated experiment loops.
+- **Pure Specifications**: No custom implementation code, Terraform IaC, or pytest suites belong in this repository; all deliverables are specified via deterministic acceptance criteria, CLI checks, and verification checklists.
 
 ---
 
 ## 2. System Overview & The DevOps Mental Model
 
-To a systems or DevOps engineer, the OHDSI platform is a standard **3-tier analytical data warehouse and compute ecosystem**:
+To a systems or DevOps engineer, the OHDSI Sandbox is a standard **3-tier analytical data warehouse, compute, and agentic AI ecosystem**:
 
 ```
                          SYSTEM ARCHITECTURE & INGRESS TOPOLOGY
@@ -34,8 +38,7 @@ To a systems or DevOps engineer, the OHDSI platform is a standard **3-tier analy
      ┌─────────────────────────────────────────────────────────────────────────┐
      │                  Nginx Reverse Proxy & Edge Gateway                     │
      │      - TLS 1.3 Termination, HSTS 2-Year, Multi-Zone Rate Limiting       │
-     │      - Small Cell Privacy Suppression Filter (MIN_CELL_COUNT >= 5)      │
-     │      - Path Routing (/atlas, /WebAPI, /mcp, /webapi-mcp, /arachne, /)   │
+     │      - Single-Domain Path Routing (/atlas, /WebAPI, /mcp, /sql, /s3)    │
      │      - Public URLs for Study Shiny Apps (/shiny/) & Reports (/reports/) │
      └───────┬────────────────────┬────────────────────┬───────────────────────┘
              │                    │                    │
@@ -46,15 +49,17 @@ To a systems or DevOps engineer, the OHDSI platform is a standard **3-tier analy
    │ - Atlas Classic   ││ - WebAPI 3.0      ││ - WebApiMcp Bridge (:8765)      │
    │ - Study Shiny Apps││ - Dedicated R Svr ││ - Arachne Data Node (:8880)     │
    │ - RStudio (:8787) ││   (broadsea-hades)││ - Local Ollama LLM (:11434)     │
+   │ - Web SQL (:8978) ││ - MinIO S3 (:9001)││ - Redis Task Broker (:6379)     │
    └─────────┬─────────┘└─────────┬─────────┘└────────────────┬────────────────┘
              │                    │                           │
              └────────────────────┼───────────────────────────┘
                                   ▼
      ┌─────────────────────────────────────────────────────────────────────────┐
      │            PostgreSQL 16 High-Throughput RDBMS Cluster                  │
-     │   - 64GB shared_buffers, NVMe Gen4 Storage (noatime,nodiratime)         │
+     │   - 64GB shared_buffers, NVMe Gen4 Storage (ZFS/Btrfs CoW Snapshots)    │
+     │   - Dedicated 64GB NVMe Swap Partition (Anti-Panic OOM Absorption)      │
      │   - Master Lookup Schema (vocab_54: ~10M records with GIN indexes)      │
-     │   - Structured Data Warehouse Schemas (cdm_synthea100k, cdm_synpuf_23m) │
+     │   - Structured Synthetic Data Schemas (cdm_synthea100k, cdm_synpuf_23m) │
      │   - Precomputed Aggregate Cache Schemas (results)                       │
      │   - Shared Connection: Connected to WebAPI, Atlas, and Dedicated R Svr  │
      │   - Port 5432 (Quarantined to Private Docker Network / VPN / Tailscale) │
@@ -62,29 +67,29 @@ To a systems or DevOps engineer, the OHDSI platform is a standard **3-tier analy
 ```
 
 ### The DevOps Rosetta Stone (Terminology Translation)
-Translating domain-specific clinical terms into standard software engineering concepts:
+Translating clinical and sandbox terms into standard software engineering concepts:
 
 | Domain Term | Software Engineering Equivalent | Technical Function |
 | :--- | :--- | :--- |
-| **OMOP CDM** | Relational Data Warehouse Schema | Standardized PostgreSQL relational schema storing subject event tables (`person`, `visit_occurrence`, `condition_occurrence`). |
+| **OMOP CDM** | Relational Data Warehouse Schema | Standardized PostgreSQL relational schema storing synthetic event records (`person`, `visit_occurrence`, `condition_occurrence`). |
 | **Athena / Vocabularies** | Master Lookup Dictionary (~10M rows) | Lookup table mapping disparate coding systems to uniform integer primary keys (`concept_id`). Uses trigram GIN indexes. |
 | **Source Daimon** | Schema Routing Registry Table | Configuration table in PostgreSQL mapping logical database aliases to physical schemas (`cdm`, `vocab`, `results`). |
 | **WebAPI** | Java Spring Boot REST Backend | Core API service providing data source management, SQL transpilation, security integration, and query execution. |
 | **Atlas (Classic & 3.0)** | Web Application Frontend | Single-Page Application (Classic: Knockout.js; 3.0: Vue 3 / single-spa) providing query authoring and visualization. |
-| **Dedicated R Server** | Dedicated R Compute Server | Containerized RStudio Server (`broadsea-hades`, port 8787) hosting all OHDSI R libraries natively. Connected to OMOP CDM and Vocabularies. |
+| **Dedicated R Server** | Dedicated R Compute Server | Containerized RStudio Server (`broadsea-hades`, port 8787) hosting all OHDSI R libraries natively with passwordless `sudo`. |
 | **Study Shiny Apps** | Interactive Analytical Dashboards | Containerized Shiny Server (`ohdsi-shiny`, port 3838) publishing interactive study apps (`CohortDiagnostics`, `Taxis`) on public URL. |
 | **Study Reports** | Static Analytical HTML Reports | Quarto / RMarkdown compiled study reports served on public URL under `/reports/`. |
-| **Achilles** | Precomputed Aggregate Cache | Batch processing job that precomputes table counts and distributions, storing them in the `results` schema for instant dashboard retrieval. |
-| **Circe / Capr** | Query Transpiler & AST Builder | Compiles JSON or R criteria into target database SQL dialects (PostgreSQL, Snowflake, BigQuery). |
-| **Cohort / Phenotype** | Entity Segment / Filter Query | Specific criteria defining a population slice (e.g. subjects meeting specific criteria within a date window). |
+| **Web SQL Studio** | Web Database IDE (CloudBeaver) | Browser-based visual SQL editor, table autocomplete, and ERD browser at `/sql/`. |
+| **MinIO S3 Mock** | Local Object Store (S3-Compatible) | Local bucket storage at `/s3/` for Strategus study artifacts, Parquet exports, and caches. |
+| **CoW Snapshots** | Sub-Minute Filesystem Rollback | ZFS or Btrfs snapshots allowing instant rollback when experiments corrupt data. |
 | **StudyAgent / MCP** | FastMCP Tool-Calling Gateway | Official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) server exposing platform capabilities to AI models via Model Context Protocol. |
 | **WebApiMcp** | WebAPI MCP Bridge Server | Dedicated MCP bridge ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp)) exposing cohort definitions and concept sets directly to LLMs. |
 | **Arachne** | Federated Research Network Node | Distributed study execution node ([`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode)) enabling multi-site studies with non-PHI aggregate export. |
-| **Small Cell Suppression** | Data Privacy Masking Middleware | Re-identification protection filter automatically masking query count results where `0 < count < 5` as `"< 5"`. |
+| **Small Cell Suppression** | Privacy Masking Middleware | Re-identification filter automatically masking counts `< 5` (configurable/bypassed in synthetic sandbox). |
 
 ---
 
-## 3. Dedicated R Server, Atlas & Study Applications Interconnectivity
+## 3. Dedicated R Server, Atlas & Sandbox Interconnectivity
 
 The platform integrates compute, storage, applications, and public hosting as a cohesive ecosystem:
 
@@ -108,8 +113,10 @@ The platform integrates compute, storage, applications, and public hosting as a 
      - `https://<domain>/mcp/` -> Model Context Protocol (FastMCP) AI Agent Gateway
      - `https://<domain>/webapi-mcp/` -> WebApiMcp Bridge Server
      - `https://<domain>/arachne/` -> OHDSI Arachne Data Node
+     - `https://<domain>/sql/` -> CloudBeaver Web SQL Studio
+     - `https://<domain>/s3/` -> MinIO S3 Object Store Console
 
-*For complete architectural specifications, see [DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md), [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md), and [AGENTIC_MCP_INTEGRATION_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENTIC_MCP_INTEGRATION_GUIDE.md).*
+*For complete architectural specifications, see [ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md), [DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md), [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md), and [AGENTIC_MCP_INTEGRATION_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENTIC_MCP_INTEGRATION_GUIDE.md).*
 
 ---
 
@@ -123,15 +130,15 @@ All deployment requirements and acceptance criteria are organized into 5 sequent
 ├─────────┬──────────────────────────────┬───────────────────────────────────────────┬───────────────────┤
 │ Stage   │ Milestone Focus              │ Core Technologies                         │ Exit Verification │
 ├─────────┼──────────────────────────────┼───────────────────────────────────────────┼───────────────────┤
-│ Gate 0  │ Host & Kernel Hardening      │ Ubuntu 24.04 LTS, NVMe noatime, UFW       │ Ports closed      │
+│ Gate 0  │ Host & Kernel Hardening      │ Ubuntu 24.04 LTS, NVMe CoW, UFW, Swap     │ Ports closed      │
 │ Gate 1  │ Turnkey Broadsea Core        │ broadsea-atlasdb, webapi, atlas, hades    │ WebAPI /info UP   │
 │ Gate 2  │ High-Capacity Data & Vocab   │ Postgres 16 (64GB shared_buffers), Redis  │ Vocab query <150ms│
 │ Gate 3  │ Atlas 3.0 & WebAPI 3.0       │ Atlas 3.0 (Vue 3), WebAPI 3.0, R Server   │ Atlas 3.0 live    │
-│ Gate 4  │ MCP AI & Federated Network   │ StudyAgent, WebApiMcp, Arachne, TLS 1.3   │ Gate 4 suite 100% │
+│ Gate 4  │ Agentic AI & Sandbox Tools   │ FastMCP, WebApiMcp, Arachne, CoW Snaps    │ Sandbox suite 100%│
 └─────────┴──────────────────────────────┴───────────────────────────────────────────┴───────────────────┘
 ```
 
-*For complete requirement IDs (REQ-001 through REQ-048) and acceptance criteria matrices (AC-001 through AC-048), see [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md).*
+*For complete requirement IDs (REQ-001 through REQ-053) and acceptance criteria matrices (AC-001 through AC-053), see [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md).*
 
 ---
 
@@ -141,12 +148,13 @@ DevOps and infrastructure teams should reference the following dedicated specifi
 
 | Specification Document | Focus Area & Content |
 | :--- | :--- |
-| **[STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md)** | **Authoritative System Requirements Specification (SRS)**: Complete RFC 2119 requirements (REQ-001 to REQ-048), acceptance criteria matrices, and milestone sign-off checklists. |
-| **[OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md)** | **Hardware & Infrastructure Specification**: Minimum and production compute, RAM, NVMe mount options (`noatime,nodiratime`), kernel sysctl parameters, network port rules, and container roster. |
+| **[ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ARCHITECTURAL_REVIEW_DEVELOPER_PLAYGROUND.md)** | **Architectural Review & Systems Engineering Assessment**: Analysis of developer hammering, CoW snapshot/rollback architecture, superuser privileges, and DevOps delivery contract. |
+| **[STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md)** | **Authoritative System Requirements Specification (SRS)**: Complete RFC 2119 requirements (REQ-001 to REQ-053), acceptance criteria matrices, and milestone sign-off checklists. |
+| **[OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md)** | **Hardware & Infrastructure Specification**: Compute, RAM, NVMe ZFS/Btrfs CoW mount, 64GB NVMe swap, cgroup memory clamping, network port rules, and 20-container roster. |
 | **[AGENTIC_MCP_INTEGRATION_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENTIC_MCP_INTEGRATION_GUIDE.md)** | **Agentic Software & MCP Guide**: Configuration snippets for Claude Desktop, Cursor, Antigravity IDE, tool catalog, JSON-RPC schemas, and verification testing. |
-| **[ENGINEERING_EXECUTION_PLAN.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md)** | **DevOps Execution Runbook**: Step-by-step rollout sequence across the 5 stage gates with deterministic CLI / curl verification commands. |
+| **[ENGINEERING_EXECUTION_PLAN.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md)** | **DevOps Execution Runbook**: Step-by-step rollout sequence across the 5 stage gates with deterministic CLI / curl verification commands and snapshot rollback tests. |
 | **[DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md)** | **Architectural Decision Record (ADR)**: Justification for the Dedicated R Server model over fragmented microservices, including CDM and WebAPI connection code patterns. |
-| **[PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)** | **Ingress & Perimeter Guide**: Single public domain reverse proxy specification, subpath routing, TLS 1.3, automated Let's Encrypt renewals, and small-cell suppression. |
+| **[PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)** | **Ingress & Perimeter Guide**: Single public domain reverse proxy specification, subpath routing, TLS 1.3, automated Let's Encrypt renewals, Web SQL Studio, and MinIO S3 routing. |
 | **[DEVOPS_QUICKSTART.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEVOPS_QUICKSTART.md)** | **DevOps Onboarding**: System mental models, jargon translation rosetta stone, and operational best practices. |
 
 ---
