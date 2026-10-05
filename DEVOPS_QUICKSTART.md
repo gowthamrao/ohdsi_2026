@@ -17,10 +17,11 @@ From an infrastructure and systems perspective, this repository specifies requir
 2. **Backend & Compute Tier**:
    - **WebAPI (Java 21 / Spring Boot 3)**: Main REST backend that compiles abstract JSON queries into vendor-specific SQL dialects. Connects to PostgreSQL via JDBC.
    - **Dedicated R Server (`broadsea-hades`)**: Containerized RStudio Server & compute engine (port 8787) hosting all OHDSI R libraries natively. Connected directly to both the OMOP CDM database via JDBC and WebAPI via REST.
-   - **FastMCP Agent Gateway**: Official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) container exposing Model Context Protocol endpoints (SSE, HTTP, Stdio) for AI models (Claude, Cursor, Antigravity) to query data safely.
+   - **FastMCP Agent Gateway & Bridges**: Official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) (port 8790) and [`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp) (port 8765) exposing Model Context Protocol endpoints for agentic AI models (Claude, Cursor, Antigravity) to manage cohorts and query data safely.
+   - **OHDSI Arachne Data Node & Engine**: Distributed research node ([`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode) on port 8880) for federated network study execution.
 3. **Frontend & Ingress Tier**:
    - **Atlas 3.0 (Vue 3 / TypeScript)** & **Atlas Classic**: Query builder web applications.
-   - **Nginx Reverse Proxy**: Enforces TLS 1.3, rate limits, single-domain path routing, and data privacy filters (`MIN_CELL_COUNT=5`).
+   - **Nginx Reverse Proxy**: Enforces TLS 1.3, rate limits, single-domain path routing (`/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/reports/`, `/mcp/`, `/webapi-mcp/`, `/arachne/`), and data privacy filters (`MIN_CELL_COUNT=5`).
 
 ---
 
@@ -38,6 +39,8 @@ From an infrastructure and systems perspective, this repository specifies requir
 | **Circe / Capr** | SQL Query Transpiler | Compiles JSON / R filter logic into database SQL. |
 | **Cohort / Phenotype** | Population Filter / Slice | A query returning matching entity IDs meeting certain conditions within a time range. |
 | **StudyAgent / MCP** | FastMCP Tool Server | Official container giving external AI agents access to database tools via MCP. |
+| **WebApiMcp** | WebAPI MCP Bridge Server | Dedicated MCP bridge ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp)) exposing cohort definitions and concept sets directly to LLMs. |
+| **Arachne** | Federated Research Network Node | Distributed study execution node ([`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode)) enabling multi-site studies with non-PHI aggregate export. |
 | **Small Cell Suppression** | Privacy Masking Filter | Middleware masking any count between 1 and 4 as `"< 5"` to prevent re-identification. |
 
 ---
@@ -80,8 +83,8 @@ DevOps engineers must verify each stage gate sequentially:
 - **Stage Gate 0**: Host & Kernel Hardening (Ubuntu 24.04 LTS, NVMe `noatime,nodiratime`, UFW firewall).
 - **Stage Gate 1**: Turnkey Broadsea Core (PostgreSQL, WebAPI Classic, Atlas Classic, Solr).
 - **Stage Gate 2**: High-Capacity Data, Dedicated R Server, Atlas & Shiny Apps (64GB shared buffers, full Athena vocab, Dedicated R Server connected to OMOP CDM and Vocabularies, Atlas connected to PostgreSQL via WebAPI, Shiny Server mounting study apps).
-- **Stage Gate 3**: Atlas 3.0 Next-Gen Frontend, WebAPI 3.0 & Public URL Ingress (single-domain routing under TLS 1.3 for `/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/reports/`, `/mcp/`).
-- **Stage Gate 4**: Sovereign Agentic Tier (hosted FastMCP via `OHDSI/StudyAgent`, local Ollama LLM, AST guardrail).
+- **Stage Gate 3**: Atlas 3.0 Next-Gen Frontend, WebAPI 3.0 & Public URL Ingress (single-domain routing under TLS 1.3 for `/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/reports/`, `/mcp/`, `/webapi-mcp/`, `/arachne/`).
+- **Stage Gate 4**: Sovereign Agentic Tier & Federated Network (hosted FastMCP via `OHDSI/StudyAgent`, `schuemie/WebApiMcp`, `OHDSI/ArachneDataNode`, local Ollama LLM, AST guardrails, and agentic client interoperability).
 
 *Detailed requirements and acceptance criteria matrices: [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md).*
 

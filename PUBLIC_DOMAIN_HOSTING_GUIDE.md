@@ -47,6 +47,8 @@ Every component of the OHDSI research environment is unified under **ONE public 
 | **`/shiny/`** | OHDSI Study Shiny Apps | Port 3838 | Interactive study reports and dashboards (e.g. `CohortDiagnostics`, `Taxis`). |
 | **`/reports/`** | OHDSI Study Static Reports | Port 3838 / 80 | Pre-compiled Quarto / RMarkdown analytical HTML reports. |
 | **`/mcp/`** | StudyAgent FastMCP Gateway | Port 8790 | Server-Sent Events (SSE) and HTTP JSON-RPC for external AI models. |
+| **`/webapi-mcp/`** | WebApiMcp Bridge Server | Port 8765 | Dedicated WebAPI MCP gateway ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp)) with streaming JSON-RPC. |
+| **`/arachne/`** | OHDSI Arachne Data Node | Port 8880 | Federated research network management interface & execution dispatch ([`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode)). |
 
 ---
 
@@ -54,8 +56,8 @@ Every component of the OHDSI research environment is unified under **ONE public 
 
 | Model | Setup Complexity | DNS Requirement | Recommended Use Case |
 | :--- | :--- | :--- | :--- |
-| **Model A: Single-Domain Path-Based Routing** *(Recommended)* | **Lowest** (1 SSL cert, 1 DNS entry) | Single `A` Record (`research.yourdomain.org`) | **Standard Production**: All tools accessible under unified prefix (`/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/mcp/`). |
-| **Model B: Subdomain-Based Routing** | Medium (Wildcard or multiple certs) | Multiple CNAMEs (`atlas.*`, `webapi.*`, `rstudio.*`, `shiny.*`) | Enterprise portals requiring independent domain isolation. |
+| **Model A: Single-Domain Path-Based Routing** *(Recommended)* | **Lowest** (1 SSL cert, 1 DNS entry) | Single `A` Record (`research.yourdomain.org`) | **Standard Production**: All tools accessible under unified prefix (`/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/mcp/`, `/webapi-mcp/`, `/arachne/`). |
+| **Model B: Subdomain-Based Routing** | Medium (Wildcard or multiple certs) | Multiple CNAMEs (`atlas.*`, `webapi.*`, `rstudio.*`, `shiny.*`, `arachne.*`) | Enterprise portals requiring independent domain isolation. |
 
 ---
 
@@ -166,6 +168,28 @@ server {
         chunked_transfer_encoding off;
         proxy_read_timeout 3600s;
     }
+
+    # 7. WebApiMcp Bridge Server (schuemie/WebApiMcp)
+    location /webapi-mcp/ {
+        proxy_pass http://webapi-mcp:8765/;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding off;
+        proxy_read_timeout 3600s;
+    }
+
+    # 8. OHDSI Arachne Data Node
+    location /arachne/ {
+        proxy_pass http://arachne-data-node:8880/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 1800s;
+    }
 }
 ```
 
@@ -194,6 +218,12 @@ curl -I -k https://research.yourdomain.org/shiny/
 # 6. Verify Model Context Protocol (MCP) stream
 curl -s -k https://research.yourdomain.org/mcp/sse \
   -H "Authorization: Bearer <valid-mcp-token>"
+
+# 7. Verify WebApiMcp health endpoint
+curl -s -k https://research.yourdomain.org/webapi-mcp/health | jq .
+
+# 8. Verify Arachne Data Node build / status
+curl -s -k https://research.yourdomain.org/arachne/api/v1/build-number | jq .
 ```
 
 ---

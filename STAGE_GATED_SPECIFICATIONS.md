@@ -81,7 +81,7 @@ To a systems or DevOps engineer, the platform is a standard **3-tier data wareho
 │ Gate 1  │ Turnkey Broadsea Core        │ broadsea-atlasdb, webapi, atlas, hades    │ WebAPI /info UP   │
 │ Gate 2  │ High-Capacity Data & Vocab   │ Postgres 16 (64GB shared_buffers), Redis  │ Vocab query <150ms│
 │ Gate 3  │ Atlas 3.0 & WebAPI 3.0       │ Atlas 3.0 (Vue 3), WebAPI 3.0, R Server   │ Atlas 3.0 live    │
-│ Gate 4  │ Public Ingress & FastMCP AI  │ Nginx TLS 1.3, Let's Encrypt, StudyAgent  │ MCP suite 100%    │
+│ Gate 4  │ MCP AI & Federated Network   │ StudyAgent, WebApiMcp, Arachne, TLS 1.3   │ Gate 4 suite 100% │
 └─────────┴──────────────────────────────┴───────────────────────────────────────────┴───────────────────┘
 ```
 
@@ -150,6 +150,10 @@ To a systems or DevOps engineer, the platform is a standard **3-tier data wareho
 8. **REQ-027 (OHDSI Study Shiny Apps & Report Deployment)**: The platform MUST provide a containerized Shiny runtime (`ohdsi-shiny` / `broadsea-open-shiny-server` on port 3838) capable of deploying interactive Shiny applications and published reports from OHDSI network studies:
    - Supported interactive apps include `CohortDiagnostics` viewer, `CohortIncidence` viewer, `Characterization` viewer, `PheValuator` viewer, `OhdsiShinyModules`, `ShinyAppBuilder`, and study-specific results dashboards (e.g. [`ohdsi-studies/Taxis`](https://github.com/ohdsi-studies/Taxis)).
    - The Shiny runtime MUST mount `/srv/shiny-server/` for interactive dashboards and `/srv/reports/` for static analytical Quarto / RMarkdown reports.
+9. **REQ-028 (RStudio Server Free / Open-Source Edition Hosting & Verification)**: The Dedicated R Server MUST deploy the free, open-source edition of RStudio Server (AGPL v3, e.g. Rocker / `ohdsi/broadsea-hades:1.19.0`), requiring zero commercial licenses:
+   - **Hosted Public Web IDE**: Accessible over the unified public domain URL at `https://<domain>/rstudio/`.
+   - **Authentication & Security**: Configured with PAM user credentials (`HADES_USER` and `HADES_PASSWORD`).
+   - **End-to-End Testing**: Must be tested by verifying: (1) public URL loads RStudio login prompt (`/rstudio/auth-sign-in`), (2) authenticated session establishes WebSocket connection, and (3) interactive R console executes queries against the connected OMOP CDM and Vocabulary database.
 
 #### B. Acceptance Criteria Matrix
 | Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
@@ -162,6 +166,7 @@ To a systems or DevOps engineer, the platform is a standard **3-tier data wareho
 | **AC-025** | OMOP & Vocab Connect | R Server connects to both OMOP CDM and Vocabulary schemas. | Inside R Server: `DatabaseConnector::querySql(conn, "SELECT COUNT(*) FROM cdm.person")` & `querySql(conn, "SELECT COUNT(*) FROM vocab_54.concept")` | Both queries return non-zero counts (> 0) |
 | **AC-026** | Atlas DB Connection | Atlas instance connects to PostgreSQL via WebAPI. | `curl -s http://localhost:8080/WebAPI/source/sources` & `curl -s http://localhost:8080/WebAPI/vocabulary/vocab_54/search/aspirin` | Returns configured data sources and vocabulary search results |
 | **AC-027** | Shiny Apps & Reports | Shiny server is running and mounts study apps directory. | `curl -s http://localhost:3838/` | HTTP 200 with Shiny Server response |
+| **AC-028** | RStudio Free Edition Test | Hosted RStudio Server Open Source loads, authenticates, and executes test query. | `curl -s -k -L https://<domain>/rstudio/auth-sign-in` & interactive test query | HTTP 200 with `RStudio` HTML title; R console executes `SELECT 1` |
 
 ---
 
@@ -204,6 +209,22 @@ To a systems or DevOps engineer, the platform is a standard **3-tier data wareho
    - Raw queries selecting individual patient records without aggregation MUST be blocked.
 5. **REQ-044 (Small Cell Suppression)**: All aggregate query responses MUST enforce Small Cell Suppression: any person count `0 < count < 5` MUST be masked as `"< 5"`.
 6. **REQ-045 (Local Sovereign LLM Inference)**: The environment MUST support local, zero-data-egress LLM inference via containerized Ollama (`ollama/ollama`) on port 11434 serving open-weights models (`llama3.3:70b`, `qwen2.5:32b`).
+7. **REQ-046 (WebApiMcp Bridge Server)**: The platform MUST deploy Martijn Schuemie's WebAPI Model Context Protocol server ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp)) as a containerized service (`webapi-mcp` on internal port 8765):
+   - **Upstream Source**: [`https://github.com/schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp).
+   - **Configuration**: Must be configured with `WEBAPI_MCP_WEBAPI_BASE_URL` pointing directly to WebAPI (e.g. `http://webapi-classic:8080/WebAPI`).
+   - **MCP Tool Surface**: Exposes native WebAPI capabilities to LLM clients (Claude, Cursor, Antigravity) via JSON-RPC, including cohort definition inspection, generation triggering, concept set expression extraction, and data source lookups.
+   - **Endpoints**: Health check at `http://localhost:8765/health` and MCP bridge at `http://localhost:8765/mcp`.
+   - **Public Ingress**: Routed via Nginx at `https://<domain>/webapi-mcp/` with proxy buffering and caching disabled.
+8. **REQ-047 (OHDSI Arachne Distributed Research Network Node)**: The platform MUST support the OHDSI Arachne federated study execution framework ([`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode) & [`OHDSI/ArachneExecutionEngine`](https://github.com/OHDSI/ArachneExecutionEngine)) to participate in distributed network studies:
+   - **Arachne Data Node Container**: Deploys `ohdsi/arachne-data-node:latest` on internal port 8880, accessible on public HTTPS ingress at `https://<domain>/arachne/`.
+   - **Execution Engine Container**: Deploys `ohdsi/arachne-execution-engine:latest` on internal port 8888 (isolated on private Docker network).
+   - **Database & WebAPI Interconnectivity**: Connects directly to the PostgreSQL OMOP CDM database for study package execution and to WebAPI for study metadata synchronization.
+   - **Data Privacy & Governance**: Adheres to OHDSI federated execution security standards—study code runs locally against patient data, and strictly aggregated, non-PHI summary results are returned. Supports both Standalone Mode (local execution) and Network Mode (federation with Arachne Central).
+9. **REQ-048 (Agentic Software Interoperability & Standard MCP Client Integration)**: The platform MUST ensure full interoperability with external agentic AI software (Claude Desktop, Cursor, Antigravity IDE, Cline, LangChain, AutoGen):
+   - **Protocol Compliance**: Endpoints MUST strictly adhere to Model Context Protocol (MCP) JSON-RPC 2.0 specifications over SSE (`/mcp/sse`, `/webapi-mcp/mcp`) and streamable HTTP.
+   - **Client Configuration Artifacts**: Standard `mcpServers` JSON connection definitions MUST be provided for both StudyAgent and WebApiMcp.
+   - **Tool Schema Discoverability**: Tools MUST expose self-describing JSON Schema parameter definitions for cohort management (`list_cohort_definitions`, `get_cohort_definition`, `generate_cohort`), concept exploration (`search_concepts`, `get_concept_set`), and CDM database queries with small-cell privacy guards.
+   - **Edge Gateway Streaming**: The Nginx reverse proxy MUST explicitly disable proxy buffering (`proxy_buffering off`), disable chunking delays, and pass `text/event-stream` headers without timeout truncation to maintain active persistent sessions with agentic runtimes.
 
 #### B. Acceptance Criteria Matrix
 | Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
@@ -214,6 +235,9 @@ To a systems or DevOps engineer, the platform is a standard **3-tier data wareho
 | **AC-043** | AST Guardrail | Destructive SQL rejected with 400. | Submit `DROP TABLE person;` to query tool | HTTP 400 with guardrail violation error |
 | **AC-044** | Small Cell Filter | Cell count between 1 and 4 is masked. | Query count returning 3 persons | Output explicitly formatted as `"< 5"` |
 | **AC-045** | Local Ollama | Ollama instance live with local model loaded. | `curl -s http://localhost:11434/api/tags` | HTTP 200 with installed model tags |
+| **AC-046** | WebApiMcp Bridge | WebApiMcp server operational on port 8765 and routes to WebAPI. | `curl -s http://localhost:8765/health` & MCP handshake at `/webapi-mcp/mcp` | HTTP 200 with healthy status; tools list returns cohort and concept set capabilities |
+| **AC-047** | Arachne Data Node | Arachne Data Node & Execution Engine operational and connected to CDM. | `curl -s http://localhost:8880/api/v1/build-number` & Execution Engine ping | HTTP 200 with Data Node build info; status healthy |
+| **AC-048** | Agentic Client Interop | Standard MCP client (Claude/Cursor/Antigravity) connects, discovers tools, and executes queries. | Connect MCP client via SSE/HTTP and invoke `list_sources` or `search_concepts` | Successful JSON-RPC handshake; valid tool response returned |
 
 ---
 
@@ -242,6 +266,7 @@ DevOps engineers must audit and verify each stage gate prior to production sign-
 - [ ] **AC-025**: R Server connects directly to OMOP CDM and Vocabulary tables via JDBC and WebAPI via REST.
 - [ ] **AC-026**: PostgreSQL database connects to WebAPI and Atlas instance (data sources and vocab search functional).
 - [ ] **AC-027**: OHDSI Study Shiny server is operational, mounting study apps and reports.
+- [ ] **AC-028**: RStudio Server Open Source (free edition) deployed, tested, and accessible at `https://<domain>/rstudio/`.
 
 ### Stage Gate 3: Atlas 3.0 Next-Gen, WebAPI 3.0 & Public URL Ingress
 - [ ] **AC-030**: Atlas 3.0 Vue 3 single-spa frontend accessible at root path (`/`).
@@ -250,10 +275,13 @@ DevOps engineers must audit and verify each stage gate prior to production sign-
 - [ ] **AC-033**: Single unified public domain routing verified for all endpoints.
 - [ ] **AC-034**: OHDSI Study Shiny apps and published reports accessible via public URL (`/shiny/`, `/reports/`).
 
-### Stage Gate 4: Sovereign Agentic Tier (MCP & BYO-Agent)
+### Stage Gate 4: Sovereign Agentic Tier (MCP & BYO-Agent) & Federated Research Network
 - [ ] **AC-040**: Official `ohdsi/study-agent:latest` image running from `OHDSI/StudyAgent`.
 - [ ] **AC-041**: MCP endpoints `/mcp/sse` and `/mcp/messages` operational with live SSE stream.
 - [ ] **AC-042**: Scoped Bearer authentication enforced; 401 returned on invalid/missing tokens.
 - [ ] **AC-043**: AST SQL guardrail blocks destructive queries and raw patient-level SELECTs.
 - [ ] **AC-044**: Small Cell Suppression verified: cell counts `< 5` masked across all queries.
 - [ ] **AC-045**: Local sovereign Ollama instance operational on port 11434.
+- [ ] **AC-046**: WebApiMcp bridge server operational on port 8765 connected to WebAPI.
+- [ ] **AC-047**: OHDSI Arachne Data Node & Execution Engine operational on ports 8880/8888 and connected to OMOP CDM.
+- [ ] **AC-048**: Agentic software interoperability verified with MCP client (tool discovery and execution pass 100%).

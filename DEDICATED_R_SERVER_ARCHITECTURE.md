@@ -32,7 +32,7 @@ In earlier designs, attempts were made to wrap every single R package into an in
 ## 2. The Decision: Centralize in a Dedicated R Server
 
 ### Core Architectural Decisions:
-1. **R runs inside a Single Dedicated R Server** (`broadsea-hades` / RStudio Server on internal port 8787).
+1. **R runs inside a Single Dedicated R Server** deploying the **free, open-source edition of RStudio Server** (`broadsea-hades` / `rocker/rstudio` on internal port 8787, AGPL-3.0 license, zero commercial licensing cost).
 2. **All OHDSI R packages are installed directly** into this R Server's unified library.
 3. **Direct CDM and WebAPI Connectivity**: The Dedicated R Server is colocated on the internal network with direct JDBC access to the PostgreSQL OMOP CDM database and REST connectivity to WebAPI.
 4. **Default Startup (`docker compose up -d`) boots ZERO Plumber microservices**, reducing idle memory footprint from **30 GB** to **~2–4 GB**.
@@ -210,9 +210,9 @@ print(sources[, c("sourceId", "sourceName", "sourceKey")])
 
 ## 6. Execution Channels for the Dedicated R Server
 
-### Channel 1: Interactive RStudio Server Web Interface
-- **Local Access**: `http://localhost:8787`
-- **Public Domain Access**: `https://research.yourdomain.org/rstudio/`
+### Channel 1: Interactive RStudio Server Web Interface (Free Open Source Edition)
+- **Software**: RStudio Server Open Source Edition (AGPL-3.0 License, zero software fee).
+- **Public Domain Access**: `https://research.yourdomain.org/rstudio/` (routed via Nginx reverse proxy with WebSocket upgrade).
 - **Default Credentials**: User `ohdsi` / Password `ohdsi2026` (configurable via `HADES_PASSWORD` in `.env`).
 - **Use Case**: Interactive cohort design in Capr, exploratory data analysis, reviewing diagnostic plots in RStudio graphics viewer.
 
@@ -226,20 +226,26 @@ docker exec -it broadsea-hades Rscript -e "source('/path/to/study_pipeline.R')"
 docker exec -it broadsea-hades Rscript -e "installed.packages()[, c('Package', 'Version')]"
 ```
 
-### Channel 3: Agentic AI Tool Calling via StudyAgent FastMCP
-External AI models (Claude, Cursor, Antigravity) connect to the official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) FastMCP server on port 8790, which executes approved analytical queries against the Dedicated R Server and CDM database with enforced small-cell suppression (`MIN_CELL_COUNT >= 5`).
+### Channel 3: Agentic AI Tool Calling via StudyAgent FastMCP & WebApiMcp
+External AI models (Claude, Cursor, Antigravity) connect to:
+- **StudyAgent FastMCP** ([`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent), port 8790): Executes approved analytical queries against the Dedicated R Server and CDM database with enforced small-cell suppression (`MIN_CELL_COUNT >= 5`).
+- **WebApiMcp Bridge** ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp), port 8765): Enables LLMs to inspect cohort definitions, extract Circe JSON, manage concept sets, and query data sources directly through WebAPI.
 
 ### Channel 4: Deploying OHDSI Study Shiny Apps & Analytical Reports
 The R Server exports study results directly into the mounted Shiny Server and static reports directory:
 - **Interactive Dashboards**: Exported to `/srv/shiny-server/<study_name>/` (e.g. `CohortDiagnostics`, `CohortIncidence`, `Taxis`) and accessible publicly at `https://research.yourdomain.org/shiny/<study_name>/`.
 - **Static HTML Reports**: Exported to `/srv/reports/<study_name>/` and accessible publicly at `https://research.yourdomain.org/reports/<study_name>/`.
 
+### Channel 5: Federated Network Execution via OHDSI Arachne
+Distributed research networks dispatch analytical study packages through the **Arachne Data Node** (`arachne-data-node`, port 8880) and **Arachne Execution Engine** (`arachne-exec-engine`, port 8888). Study packages execute in isolated containerized environments leveraging HADES R packages against the local OMOP CDM database, exporting strictly aggregated, non-PHI summary results back to the study coordinator.
+
 ---
 
 ## 7. Verification & Acceptance Criteria
 
 1. **R Server Status**: `docker inspect --format='{{.State.Status}}' broadsea-hades` returns `running`.
-2. **CDM Reachability**: R Server resolves `ohdsi-postgres:5432` and completes a test query against `cdm.person`.
+2. **CDM Reachability**: R Server resolves `ohdsi-postgres:5432` and completes a test query against `cdm.person` and `vocab_54.concept`.
 3. **WebAPI Reachability**: R Server resolves `http://webapi-classic:8080/WebAPI/info` and retrieves HTTP 200 with version payload.
 4. **Package Suite Availability**: Executing `sapply(c('DatabaseConnector', 'Capr', 'CohortMethod', 'PatientLevelPrediction', 'Strategus', 'ROhdsiWebApi'), requireNamespace)` returns all `TRUE`.
-5. **Memory Utilization**: Baseline idle memory of the R Server remains under **2.5 GB RAM**.
+5. **RStudio Server Free Edition Testing**: `curl -s -k -L https://research.yourdomain.org/rstudio/auth-sign-in` returns HTTP 200 with RStudio Open Source login page; authenticated user session loads the IDE and executes test queries against the connected OMOP database.
+6. **Memory Utilization**: Baseline idle memory of the R Server remains under **2.5 GB RAM**.

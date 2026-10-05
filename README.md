@@ -35,17 +35,17 @@ To a systems or DevOps engineer, the OHDSI platform is a standard **3-tier analy
      │                  Nginx Reverse Proxy & Edge Gateway                     │
      │      - TLS 1.3 Termination, HSTS 2-Year, Multi-Zone Rate Limiting       │
      │      - Small Cell Privacy Suppression Filter (MIN_CELL_COUNT >= 5)      │
-     │      - Single-Domain Path Routing (/atlas, /WebAPI, /mcp, /rstudio, /)  │
+     │      - Path Routing (/atlas, /WebAPI, /mcp, /webapi-mcp, /arachne, /)   │
      │      - Public URLs for Study Shiny Apps (/shiny/) & Reports (/reports/) │
      └───────┬────────────────────┬────────────────────┬───────────────────────┘
              │                    │                    │
              ▼                    ▼                    ▼
    ┌───────────────────┐┌───────────────────┐┌─────────────────────────────────┐
-   │ Frontend Web Apps ││  Data & R Engine  ││  Agentic AI & MCP Gateway       │
+   │ Frontend Web Apps ││  Data & R Engine  ││  Agentic AI & Federated Network │
    │ - Atlas 3.0 (Vue3)││ - WebAPI Classic  ││ - FastMCP Server (:8790)        │
-   │ - Atlas Classic   ││ - WebAPI 3.0      ││   (SSE, Streamable HTTP, Stdio) │
-   │ - Study Shiny Apps││ - Dedicated R Svr ││ - Local Ollama LLM (:11434)     │
-   │ - RStudio (:8787) ││   (broadsea-hades)││ - Redis Task Broker (:6379)     │
+   │ - Atlas Classic   ││ - WebAPI 3.0      ││ - WebApiMcp Bridge (:8765)      │
+   │ - Study Shiny Apps││ - Dedicated R Svr ││ - Arachne Data Node (:8880)     │
+   │ - RStudio (:8787) ││   (broadsea-hades)││ - Local Ollama LLM (:11434)     │
    └─────────┬─────────┘└─────────┬─────────┘└────────────────┬────────────────┘
              │                    │                           │
              └────────────────────┼───────────────────────────┘
@@ -78,6 +78,8 @@ Translating domain-specific clinical terms into standard software engineering co
 | **Circe / Capr** | Query Transpiler & AST Builder | Compiles JSON or R criteria into target database SQL dialects (PostgreSQL, Snowflake, BigQuery). |
 | **Cohort / Phenotype** | Entity Segment / Filter Query | Specific criteria defining a population slice (e.g. subjects meeting specific criteria within a date window). |
 | **StudyAgent / MCP** | FastMCP Tool-Calling Gateway | Official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) server exposing platform capabilities to AI models via Model Context Protocol. |
+| **WebApiMcp** | WebAPI MCP Bridge Server | Dedicated MCP bridge ([`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp)) exposing cohort definitions and concept sets directly to LLMs. |
+| **Arachne** | Federated Research Network Node | Distributed study execution node ([`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode)) enabling multi-site studies with non-PHI aggregate export. |
 | **Small Cell Suppression** | Data Privacy Masking Middleware | Re-identification protection filter automatically masking query count results where `0 < count < 5` as `"< 5"`. |
 
 ---
@@ -104,8 +106,10 @@ The platform integrates compute, storage, applications, and public hosting as a 
      - `https://<domain>/shiny/` -> Interactive OHDSI Study Shiny Apps
      - `https://<domain>/reports/` -> Static OHDSI Study Analytical HTML Reports
      - `https://<domain>/mcp/` -> Model Context Protocol (FastMCP) AI Agent Gateway
+     - `https://<domain>/webapi-mcp/` -> WebApiMcp Bridge Server
+     - `https://<domain>/arachne/` -> OHDSI Arachne Data Node
 
-*For complete architectural specifications, see [DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md) and [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md).*
+*For complete architectural specifications, see [DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md), [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md), and [AGENTIC_MCP_INTEGRATION_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENTIC_MCP_INTEGRATION_GUIDE.md).*
 
 ---
 
@@ -123,11 +127,11 @@ All deployment requirements and acceptance criteria are organized into 5 sequent
 │ Gate 1  │ Turnkey Broadsea Core        │ broadsea-atlasdb, webapi, atlas, hades    │ WebAPI /info UP   │
 │ Gate 2  │ High-Capacity Data & Vocab   │ Postgres 16 (64GB shared_buffers), Redis  │ Vocab query <150ms│
 │ Gate 3  │ Atlas 3.0 & WebAPI 3.0       │ Atlas 3.0 (Vue 3), WebAPI 3.0, R Server   │ Atlas 3.0 live    │
-│ Gate 4  │ Public Ingress & FastMCP AI  │ Nginx TLS 1.3, Let's Encrypt, StudyAgent  │ MCP suite 100%    │
+│ Gate 4  │ MCP AI & Federated Network   │ StudyAgent, WebApiMcp, Arachne, TLS 1.3   │ Gate 4 suite 100% │
 └─────────┴──────────────────────────────┴───────────────────────────────────────────┴───────────────────┘
 ```
 
-*For complete requirement IDs (REQ-001 through REQ-045) and acceptance criteria matrices (AC-001 through AC-045), see [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md).*
+*For complete requirement IDs (REQ-001 through REQ-048) and acceptance criteria matrices (AC-001 through AC-048), see [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md).*
 
 ---
 
@@ -137,8 +141,9 @@ DevOps and infrastructure teams should reference the following dedicated specifi
 
 | Specification Document | Focus Area & Content |
 | :--- | :--- |
-| **[STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md)** | **Authoritative System Requirements Specification (SRS)**: Complete RFC 2119 requirements (REQ-001 to REQ-045), acceptance criteria matrices, and milestone sign-off checklists. |
+| **[STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md)** | **Authoritative System Requirements Specification (SRS)**: Complete RFC 2119 requirements (REQ-001 to REQ-048), acceptance criteria matrices, and milestone sign-off checklists. |
 | **[OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/OHDSI_SERVER_ENVIRONMENT_REQUIREMENTS.md)** | **Hardware & Infrastructure Specification**: Minimum and production compute, RAM, NVMe mount options (`noatime,nodiratime`), kernel sysctl parameters, network port rules, and container roster. |
+| **[AGENTIC_MCP_INTEGRATION_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/AGENTIC_MCP_INTEGRATION_GUIDE.md)** | **Agentic Software & MCP Guide**: Configuration snippets for Claude Desktop, Cursor, Antigravity IDE, tool catalog, JSON-RPC schemas, and verification testing. |
 | **[ENGINEERING_EXECUTION_PLAN.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/ENGINEERING_EXECUTION_PLAN.md)** | **DevOps Execution Runbook**: Step-by-step rollout sequence across the 5 stage gates with deterministic CLI / curl verification commands. |
 | **[DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md)** | **Architectural Decision Record (ADR)**: Justification for the Dedicated R Server model over fragmented microservices, including CDM and WebAPI connection code patterns. |
 | **[PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md)** | **Ingress & Perimeter Guide**: Single public domain reverse proxy specification, subpath routing, TLS 1.3, automated Let's Encrypt renewals, and small-cell suppression. |
@@ -152,6 +157,8 @@ This specification directly references and relies upon official upstream OHDSI r
 
 - **Broadsea Core**: [`OHDSI/Broadsea`](https://github.com/OHDSI/Broadsea) (Broadsea 3.5 deployment profile standards).
 - **StudyAgent FastMCP Gateway**: [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) (`ohdsi/study-agent:latest`).
+- **WebApiMcp Bridge**: [`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp) (Dedicated WebAPI MCP bridge server).
+- **OHDSI Arachne Data Node & Engine**: [`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode), [`OHDSI/ArachneExecutionEngine`](https://github.com/OHDSI/ArachneExecutionEngine), and [`OHDSI/ArachneCentral`](https://github.com/OHDSI/ArachneCentral).
 - **HADES Analytical Packages**: [`OHDSI/Hades`](https://github.com/OHDSI/Hades) (Pre-installed in `ohdsi/broadsea-hades:1.19.0`).
 - **WebAPI**: [`OHDSI/WebAPI`](https://github.com/OHDSI/WebAPI) (`ohdsi/webapi:2.14.0`).
 - **Atlas**: [`OHDSI/Atlas`](https://github.com/OHDSI/Atlas) (`ohdsi/atlas:2.14.0`).

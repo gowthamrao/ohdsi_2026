@@ -20,7 +20,7 @@ This runbook guides DevOps engineers step-by-step from bare-metal host provision
 │ Gate 1  │ Turnkey Broadsea Core        │ broadsea-atlasdb, webapi, atlas, hades    │ WebAPI /info UP   │
 │ Gate 2  │ High-Capacity Data & Vocab   │ Postgres 16 (64GB shared_buffers), Redis  │ Vocab query <150ms│
 │ Gate 3  │ Atlas 3.0 & WebAPI 3.0       │ Atlas 3.0 (Vue 3), WebAPI 3.0, R Server   │ Atlas 3.0 live    │
-│ Gate 4  │ Public Ingress & FastMCP AI  │ Nginx TLS 1.3, Let's Encrypt, StudyAgent  │ MCP suite 100%    │
+│ Gate 4  │ MCP AI & Federated Network   │ StudyAgent, WebApiMcp, Arachne, TLS 1.3   │ Gate 4 suite 100% │
 └─────────┴──────────────────────────────┴───────────────────────────────────────────┴───────────────────┘
 ```
 
@@ -122,14 +122,22 @@ This runbook guides DevOps engineers step-by-step from bare-metal host provision
    curl -I -k https://<domain>/reports/
    ```
 
-### Stage Gate 4: Sovereign Agentic Tier (Hosted FastMCP & BYO-Agent)
-1. Launch the official StudyAgent MCP container and local Ollama inference:
+### Stage Gate 4: Sovereign Agentic Tier (Hosted FastMCP & BYO-Agent) & Federated Network
+1. Launch the official StudyAgent MCP container, WebApiMcp bridge server, Arachne node, and local Ollama inference:
    ```bash
-   docker compose up -d study-agent-mcp study-agent-acp ollama-service
+   docker compose up -d study-agent-mcp webapi-mcp arachne-data-node arachne-exec-engine ollama-service
    ```
-2. Test MCP agent connectivity:
+2. Test MCP agent connectivity and tool discovery:
    ```bash
+   # Test StudyAgent MCP endpoint
    curl -s -k https://<domain>/mcp/sse -H "Authorization: Bearer <token>"
+
+   # Test WebApiMcp bridge server health and tool discovery
+   curl -s -k https://<domain>/webapi-mcp/health | jq .
+   ```
+3. Test Arachne Federated Data Node status:
+   ```bash
+   curl -s -k https://<domain>/arachne/api/v1/build-number | jq .
    ```
 
 ---

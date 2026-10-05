@@ -50,11 +50,14 @@ net.ipv4.tcp_max_syn_backlog = 8192
 | **5432** | TCP | Private | PostgreSQL 16 | **Quarantined**: Accessible only via private Docker network, VPN, or Tailscale. |
 | **8787** | HTTP | Private | RStudio Server (HADES) | Proxied via Nginx HTTPS at `/rstudio/`; direct host port closed to public. |
 | **3838** | HTTP | Private | OHDSI Study Shiny Server | Proxied via Nginx HTTPS at `/shiny/` and `/reports/`; direct host port closed. |
+| **8765** | HTTP | Private | WebApiMcp Bridge | Proxied via Nginx HTTPS at `/webapi-mcp/`; direct host port closed to public. |
+| **8880** | HTTP | Private | Arachne Data Node | Proxied via Nginx HTTPS at `/arachne/`; direct host port closed to public. |
+| **8888** | HTTP | Private | Arachne Execution Engine | Quarantined to internal Docker network; executes study packages. |
 | **6379** | TCP | Private | Redis Task Broker | Internal Docker network only; no external exposure. |
 
 ---
 
-## 4. Production Container Roster (16 Core Services)
+## 4. Production Container Roster (18 Core Services)
 
 All services are orchestrated via standard `docker-compose.yml`:
 
@@ -76,7 +79,9 @@ All services are orchestrated via standard `docker-compose.yml`:
 │ `ohdsi-redis`        │ `redis:7-alpine`     │ 6379        │ Internal   │
 │ `ohdsi-shiny`        │ `rocker/shiny:4.3.3` │ 3838        │ `/shiny/`  │
 │ `study-agent-mcp`    │ `study-agent:latest` │ 8790        │ `/mcp/`    │
-│ `study-agent-acp`    │ `study-agent:latest` │ 8765        │ Internal   │
+│ `webapi-mcp`         │ `webapi-mcp:latest`  │ 8765        │`/webapi-mcp`│
+│ `arachne-data-node`  │ `arachne-data-node`  │ 8880        │ `/arachne/`│
+│ `arachne-exec-engine`│ `arachne-exec-engine`│ 8888        │ Internal   │
 │ `ollama-service`     │ `ollama/ollama`      │ 11434       │ Internal   │
 │ `pythia-agent`       │ `ohdsi/pythia`       │ 8080        │ Internal   │
 │ `atlas3-db-init`     │ `postgres:16-alpine` │ Migration   │ Internal   │
@@ -105,9 +110,39 @@ Rather than deploying 15+ fragile Plumber microservices, all analytical R packag
 
 ---
 
-## 6. Model Context Protocol (MCP) Agent Gateway
+## 6. Model Context Protocol (MCP) Agent Gateways
 
-AI agents connect via the official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) container (`study-agent-mcp`):
-- **Ingress Route**: `/mcp/sse` and `/mcp/messages` (managed by Nginx with SSE buffering disabled).
+The platform deploys two specialized MCP servers to interface with external LLM agents (Claude, Cursor, Antigravity):
+
+### A. StudyAgent FastMCP Gateway (`study-agent-mcp`)
+- **Upstream**: [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) (port 8790).
+- **Ingress Route**: `/mcp/sse` and `/mcp/messages` (proxied by Nginx with SSE buffering disabled).
 - **Configuration**: Mounted from `studyagent/config.yaml`.
 - **Privacy Controls**: AST SQL query parsing and Small Cell Suppression (`MIN_CELL_COUNT >= 5`).
+
+### B. WebApiMcp Bridge Server (`webapi-mcp`)
+- **Upstream**: [`schuemie/WebApiMcp`](https://github.com/schuemie/WebApiMcp) (port 8765).
+- **Ingress Route**: `/webapi-mcp/` (proxied by Nginx with chunked transfer and streaming enabled).
+- **Configuration**: `WEBAPI_MCP_WEBAPI_BASE_URL=http://webapi-classic:8080/WebAPI`.
+- **Function**: Enables LLM agents to manage cohort definitions, fetch Circe JSON, inspect concept sets, and query data sources directly via WebAPI.
+- **Endpoints**: Health check at `/webapi-mcp/health` and MCP JSON-RPC at `/webapi-mcp/mcp`.
+
+---
+
+## 7. OHDSI Arachne Distributed Research Network Integration
+
+The platform provides native support for distributed network study execution via OHDSI Arachne:
+
+- **Upstream Standard**: [`OHDSI/ArachneDataNode`](https://github.com/OHDSI/ArachneDataNode), [`OHDSI/ArachneExecutionEngine`](https://github.com/OHDSI/ArachneExecutionEngine), and [`OHDSI/ArachneCentral`](https://github.com/OHDSI/ArachneCentral).
+- **Arachne Data Node (`arachne-data-node`)**:
+  - Exposes web management and REST API on internal port 8880.
+  - Proxied via Nginx HTTPS at `https://<domain>/arachne/`.
+  - Connects to the local PostgreSQL OMOP CDM database and WebAPI instance.
+  - Coordinates study package reception, authorization, execution dispatch, and results inspection.
+- **Arachne Execution Engine (`arachne-exec-engine`)**:
+  - Internal execution daemon on port 8888 (isolated from public ingress).
+  - Executes study R packages and SQL queries inside isolated Docker container runtimes.
+- **Federated Data Privacy Guarantee**:
+  - Patient-level microdata **never** leaves the local environment firewall.
+  - Only aggregate, non-PHI summary statistics and model coefficients are packaged and returned.
+  - Supports both **Standalone Mode** (local study execution) and **Network Mode** (federated participation with Arachne Central).
