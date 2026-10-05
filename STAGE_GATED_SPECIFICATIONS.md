@@ -160,6 +160,12 @@ This document establishes the formal, binding technical requirements and verifia
     - Code-enforced scientific guardrails: expectation gating for all diagnostic calls, the 5-criterion Phase 2 to Phase 3 transition gate, anti-overfitting 3-call evaluation budget cap, and static concept-ID provenance checks.
     - Interactive IDE cohort developer skill (`.agents/skills/cohort-developer/SKILL.md`) and Capr operational reference (`CAPR_REFERENCE.md`).
     - The 12-tool MCP contract supported via sovereign R MCP server (`tools/server.R`, `compileWorker.R`) with AST sandboxing and PostgreSQL OMOP CDM v5.4 connectivity.
+17. **REQ-056 (Phenelope LLM-Based Concept Set Builder Integration)**: The platform MUST natively support the Phenelope concept set curation framework ([`OHDSI/Phenelope`](https://github.com/OHDSI/Phenelope) by Joel N. Swerdel, Dr. Martijn Schuemie, and Dr. Anna Ostropolets):
+    - `Phenelope` R package available in the Dedicated R Server (`broadsea-hades`), enabling `createConceptSet()` and `createClinicalDescription()` over local OMOP CDM v5.4.
+    - Direct integration with local sovereign LLMs (Ollama port 11434 with `llama3.3`) via `ellmer` for zero-data-leakage concept evaluation, with cloud API fallbacks.
+    - Dynamic concept set synthesis exposed to AI agents via `createNewConceptSet` tool in the `r-tools` MCP server (`tools/server.R`).
+    - Dedicated workspace skill (`.agents/skills/phenelope-concept-set-builder/SKILL.md`) for interactive concept set generation.
+    - Automated concept set condensation producing compact ATLAS Circe JSON and reproducible CSV audit ledgers with explicit LLM rationales.
 
 #### B. Acceptance Criteria Matrix
 | Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
@@ -180,6 +186,7 @@ This document establishes the formal, binding technical requirements and verifia
 | **AC-053** | Web SQL Studio & MinIO | CloudBeaver Web SQL IDE and MinIO S3 console operational over HTTPS. | `curl -s -k -I https://<domain>/sql/` & `curl -s -k -I https://<domain>/s3/` | HTTP 200/302 for both developer services |
 | **AC-054** | AgentPlayGround Skills | Workspace `.agents/skills/` contains the 4 phenotyping skills and connects to sandbox MCP tools (credited to Dr. Martijn Schuemie). | Test skill invocation: `/clinical-definition-refiner` & `/ohdsi-question-standardizer` | Interactive questionnaire engages; study intent validates against schema |
 | **AC-055** | PhenotypingAgent Engine | Autonomous LangGraph phenotyping engine and cohort-developer skill operational (credited to Dr. Martijn Schuemie). | `python -m pytest -q` & `python -m phenotyping_agent.cli run --clinical-definition "examples/acute_liver_failure.txt" --dry-run` | 100% pass across 80 tests; dry-run completes with action 'done' and PPV/Sens > 0.8; AST compile worker enforces allow-list |
+| **AC-056** | Phenelope Concept Builder | Phenelope LLM concept set builder operational in HADES and exposed via MCP `createNewConceptSet` (credited to Joel N. Swerdel, Dr. Martijn Schuemie, Dr. Anna Ostropolets). | Execute `Phenelope::createConceptSet()` in R and invoke `createNewConceptSet` MCP tool | Candidate concepts evaluated; audit CSV generated with rationales; ATLAS Circe JSON exported |
 
 ---
 
@@ -234,3 +241,4 @@ DevOps engineers must audit and verify each criterion prior to final handover to
 - [ ] **AC-053**: Developer Web SQL Studio (`/sql/`) and MinIO S3 object store (`/s3/`) verified.
 - [ ] **AC-054**: AgentPlayGround computational phenotyping skills operational in `.agents/` and bound to sandbox MCP tools (credited to Dr. Martijn Schuemie).
 - [ ] **AC-055**: PhenotypingAgent autonomous LangGraph engine and cohort-developer skill operational with 100% test pass and dry-run completion (credited to Dr. Martijn Schuemie).
+- [ ] **AC-056**: Phenelope LLM concept set builder operational in HADES and exposed via MCP `createNewConceptSet` tool (credited to Joel N. Swerdel, Dr. Martijn Schuemie, Dr. Anna Ostropolets).

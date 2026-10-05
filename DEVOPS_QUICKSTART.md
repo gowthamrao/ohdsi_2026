@@ -33,6 +33,7 @@ When delivering the sandbox to the Data Science and Informatics teams, provide t
 | **MinIO S3 Mock** | `https://<domain>/s3/` | User: `minioadmin`<br>Pass: `${MINIO_ROOT_PASSWORD}`| Developers: S3 object storage for Strategus study artifacts. |
 | **AgentPlayGround Skills** | Native in `.agents/skills/` | IDE Agent Commands | Data Science: 4 phenotyping skills by Dr. Martijn Schuemie (`/clinical-definition-refiner`, `/ohdsi-question-standardizer`, etc.). |
 | **PhenotypingAgent & Cohort Developer** | `phenotyping_agent/` & `.agents/skills/cohort-developer/` | CLI / IDE Command | Data Science & AI: Autonomous LangGraph phenotyping engine and `/cohort-developer` skill by Dr. Martijn Schuemie. |
+| **Phenelope Concept Builder** | `OHDSI/Phenelope` & `.agents/skills/phenelope-concept-set-builder/` | R / MCP Tool / Skill | Informatics & AI: LLM-based concept set builder by Joel N. Swerdel, Dr. Martijn Schuemie, Dr. Anna Ostropolets. |
 
 ---
 
@@ -97,6 +98,13 @@ The sandbox natively integrates Dr. Martijn Schuemie's [`schuemie/PhenotypingAge
   python -m pytest -q
   ```
 - *For complete architectural and operational details, see [PHENOTYPING_AGENT_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PHENOTYPING_AGENT_SANDBOX_INTEGRATION.md).*
+
+### F. LLM-Based Concept Set Building with Phenelope (Joel N. Swerdel, Dr. Martijn Schuemie, Dr. Anna Ostropolets)
+The sandbox natively integrates the [`OHDSI/Phenelope`](https://github.com/OHDSI/Phenelope) framework:
+- **Interactive R in HADES**: Data scientists run `Phenelope::createConceptSet()` connecting to local Ollama (`llama3.3`) and PostgreSQL `omop_54`.
+- **Sovereign MCP Tool**: AI agents call `createNewConceptSet(name, description)` over `r-tools` (`tools/server.R`) for dynamic concept set generation.
+- **Workspace Skill**: Invoke `/phenelope` in IDEs for guided concept set building and audit CSV review.
+- *For complete architectural and operational details, see [PHENELOPE_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PHENELOPE_SANDBOX_INTEGRATION.md).*
 
 ---
 

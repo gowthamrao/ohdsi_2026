@@ -102,24 +102,45 @@ if (targetDbms == "spark") {
   options(sqlRenderTempEmulationSchema = NULL)
 }
 
-# Optional LLM clients for Phenelope (resilient fallback if keys not configured)
-llmClientO3 <- tryCatch({
-  ellmer::chat_azure_openai(
-    endpoint = keyring::key_get("genai_openai_endpoint"),
-    api_version = "2024-12-01-preview",
-    model = "o3",
-    credentials = function() keyring::key_get("genai_api_gpt4_key")
-  )
-}, error = function(e) NULL)
+# Sovereign & Cloud LLM client provider for Phenelope
+getPhenelopeLlmClient <- function() {
+  # 1. Local Sovereign Ollama on port 11434 (default in OHDSI Sandbox)
+  ollamaEndpoint <- Sys.getenv("OLLAMA_ENDPOINT", "http://localhost:11434")
+  ollamaModel <- Sys.getenv("OLLAMA_MODEL", "llama3.3")
+  client <- tryCatch({
+    ellmer::chat_ollama(model = ollamaModel, endpoint = ollamaEndpoint)
+  }, error = function(e) NULL)
+  if (!is.null(client)) return(client)
 
-llmClient4o <- tryCatch({
-  ellmer::chat_azure_openai(
-    endpoint = keyring::key_get("genai_openai_endpoint"),
-    api_version = "2023-03-15-preview",
-    model = "gpt-4o",
-    credentials = function() keyring::key_get("genai_api_gpt4_key")
-  )
-}, error = function(e) NULL)
+  # 2. OpenAI API
+  openaiKey <- Sys.getenv("OPENAI_API_KEY", "")
+  if (openaiKey != "") {
+    client <- tryCatch({
+      ellmer::chat_openai(model = Sys.getenv("OPENAI_MODEL", "gpt-4o"), api_key = openaiKey)
+    }, error = function(e) NULL)
+    if (!is.null(client)) return(client)
+  }
+
+  # 3. Azure OpenAI via keyring or env
+  azureEndpoint <- tryCatch(keyring::key_get("genai_openai_endpoint"), error = function(e) Sys.getenv("AZURE_OPENAI_ENDPOINT", ""))
+  azureKey <- tryCatch(keyring::key_get("genai_api_gpt4_key"), error = function(e) Sys.getenv("AZURE_OPENAI_KEY", ""))
+  if (azureEndpoint != "" && azureKey != "") {
+    client <- tryCatch({
+      ellmer::chat_azure_openai(
+        endpoint = azureEndpoint,
+        api_version = Sys.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
+        model = Sys.getenv("AZURE_OPENAI_MODEL", "gpt-4o"),
+        credentials = function() azureKey
+      )
+    }, error = function(e) NULL)
+    if (!is.null(client)) return(client)
+  }
+
+  return(NULL)
+}
+
+llmClientO3 <- getPhenelopeLlmClient()
+llmClient4o <- llmClientO3
 
 newConceptSetsFolder <- "newConceptSets"
 
@@ -1209,13 +1230,53 @@ samplePatientProfile <- function(cohortId, phenotype, type) {
 
 createNewConceptSet <- function(name, description) {
   outputFolder <- file.path(newConceptSetsFolder, gsub("[^[:alnum:]]", "", name))
-  json <- Phenelope::createConceptSet(
-    name = name,
-    clinicalDefinition = description,
-    connectionDetails = connectionDetails,
-    vocabDatabaseSchema = cdmDatabaseSchema,
-    llmClient = llmClientO3
-  )
+  if (!dir.exists(outputFolder)) {
+    dir.create(outputFolder, recursive = TRUE, showWarnings = FALSE)
+  }
+  client <- getPhenelopeLlmClient()
+  if (is.null(client)) {
+    stop("No LLM client configured for Phenelope. Please configure OPENAI_API_KEY, OLLAMA_ENDPOINT, or Azure credentials.")
+  }
+  
+  # Search for candidate seed concepts if originalConceptList is required
+  seedSql <- "SELECT concept_id FROM @cdm_database_schema.concept WHERE LOWER(concept_name) = LOWER('@concept_name') AND standard_concept = 'S' LIMIT 5;"
+  renderedSeedSql <- SqlRender::render(seedSql, cdm_database_schema = cdmDatabaseSchema, concept_name = name)
+  renderedSeedSql <- SqlRender::translate(renderedSeedSql, targetDialect = connectionDetails$dbms)
+  seedConcepts <- tryCatch({
+    conn <- DatabaseConnector::connect(connectionDetails)
+    on.exit(DatabaseConnector::disconnect(conn), add = TRUE)
+    df <- DatabaseConnector::querySql(conn, renderedSeedSql, snakeCaseToCamelCase = TRUE)
+    df$conceptId
+  }, error = function(e) c())
+  
+  phenelopeRes <- tryCatch({
+    # Production Phenelope package signature
+    Phenelope::createConceptSet(
+      conceptName = name,
+      originalConceptList = if (length(seedConcepts) > 0) seedConcepts else c(0),
+      excludedConditions = "none",
+      llmClient = client,
+      connectionDetails = connectionDetails,
+      cdmDatabaseSchema = cdmDatabaseSchema,
+      outputDirectory = outputFolder,
+      condenseConceptSet = TRUE
+    )
+  }, error = function(e) {
+    # Fallback to development version signature
+    Phenelope::createConceptSet(
+      name = name,
+      clinicalDefinition = description,
+      connectionDetails = connectionDetails,
+      vocabDatabaseSchema = cdmDatabaseSchema,
+      llmClient = client
+    )
+  })
+  
+  json <- if (is.list(phenelopeRes) && length(phenelopeRes) >= 2) phenelopeRes[[2]] else phenelopeRes
+  if (!is.character(json)) {
+    json <- jsonlite::toJSON(json, auto_unbox = TRUE)
+  }
+  
   sql <- CirceR::buildConceptSetQuery(json)
   counts <- getCounts(sql, connectionPool, cdmDatabaseSchema)
   capr <- jsonToCaprWithReference(json, name)
@@ -1428,8 +1489,8 @@ if (getOption("RUN_SERVER", default = TRUE)) {
       convertCaprToJsonTool,
       generateCohortTool,
       evaluateCohortTool,
-      samplePatientProfileTool
-      #createNewConceptSetTool
+      samplePatientProfileTool,
+      createNewConceptSetTool
     ),
     session_tools = FALSE
   )

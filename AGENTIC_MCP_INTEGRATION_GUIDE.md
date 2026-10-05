@@ -218,3 +218,21 @@ The platform natively integrates the autonomous phenotyping engine and interacti
 
 *For complete details, see [PHENOTYPING_AGENT_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PHENOTYPING_AGENT_SANDBOX_INTEGRATION.md).*
 
+---
+
+## 7. Phenelope LLM-Based Concept Set Builder (Joel N. Swerdel, Dr. Martijn Schuemie, Dr. Anna Ostropolets)
+
+The platform natively integrates the LLM-based concept set builder authored by **Joel N. Swerdel** with major contributions from **Dr. Martijn Schuemie** and **Dr. Anna Ostropolets** in [`OHDSI/Phenelope`](https://github.com/OHDSI/Phenelope):
+
+- **Dedicated R Server Engine (`broadsea-hades`)**:
+  - `Phenelope` is installed and loadable via `library(Phenelope)`.
+  - Connects to local PostgreSQL OMOP CDM v5.4 (`omop_54` / `vocab_54`) and sovereign local Ollama (`llama3.3` on port 11434) via `ellmer`.
+- **Dynamic Concept Set Synthesis MCP Tool (`createNewConceptSet`)**:
+  - Exposed via `tools/server.R` in the `r-tools` MCP server.
+  - Takes `name` and clinical `description`, discovers seed concepts, runs PHOEBE and hierarchy expansion, prompts the LLM for YES/NO adjudication with clinical rationale, and returns inlined Capr `cs(...)` code.
+- **Interactive Workspace Skill ([`.agents/skills/phenelope-concept-set-builder/SKILL.md`](file:///c:/files/git/github/ohdsi/ohdsi_2026/.agents/skills/phenelope-concept-set-builder/SKILL.md))**:
+  - Provides the `/phenelope` command for IDE agents to build concept sets with full CSV audit ledgers.
+
+*For complete details, see [PHENELOPE_SANDBOX_INTEGRATION.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PHENELOPE_SANDBOX_INTEGRATION.md).*
+
+
