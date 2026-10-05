@@ -141,10 +141,15 @@ To a systems or DevOps engineer, the platform is a standard **3-tier data wareho
    | **6. Execution, Results & Visualization** | `Strategus`<br>`ResultModelManager`<br>`ROhdsiWebApi`<br>`OhdsiShinyModules`<br>`ShinyAppBuilder`<br>`Eunomia`<br>`Taxis` | Multi-analysis pipeline orchestration, Results Data Model DDL manager, WebAPI REST integration, interactive Shiny modules, synthetic CDM testbed, and association mining ([ohdsi-studies/Taxis](https://github.com/ohdsi-studies/Taxis)). |
 
 5. **REQ-024 (External Study Packages)**: Network studies such as [`ohdsi-studies/Taxis`](https://github.com/ohdsi-studies/Taxis) MUST be executed directly within the Dedicated R Server using standard `DatabaseConnector` queries.
-6. **REQ-025 (R Server CDM & WebAPI Interconnectivity)**: The Dedicated R Server MUST have direct internal network connectivity to both the OMOP CDM PostgreSQL database (tables `person`, `condition_occurrence`, etc.) and the WebAPI backend:
-   - **Direct CDM Access**: The R Server MUST be provisioned with JDBC drivers (`DATABASECONNECTOR_JAR_FOLDER`) and environment connection parameters (`CDM_SERVER`, `CDM_PORT`, `CDM_DATABASE`, `CDM_SCHEMA`, `VOCAB_SCHEMA`, `RESULTS_SCHEMA`, `CDM_USER`, `CDM_PASSWORD`) to execute queries via `DatabaseConnector`.
-   - **Shared Single Source of Truth**: The CDM database accessed by the R Server MUST be the exact same database cluster accessed by Atlas and WebAPI.
-   - **WebAPI Integration**: The R Server MUST be configured with `WEBAPI_URL` allowing `ROhdsiWebApi` to fetch cohort definitions, export concept sets, and execute cohort generation directly against the shared WebAPI instance.
+6. **REQ-025 (R Server Connection to OMOP CDM & Vocabulary Database)**: The Dedicated R Server MUST have direct internal network connectivity to the PostgreSQL database housing both the OMOP CDM event tables (`person`, `condition_occurrence`, `visit_occurrence`, etc.) and the standardized Athena Vocabulary tables (`concept`, `concept_ancestor`, `concept_relationship`, `concept_synonym`):
+   - **Direct JDBC Access**: The R Server MUST be provisioned with JDBC drivers (`DATABASECONNECTOR_JAR_FOLDER`) and environment connection parameters (`CDM_SERVER`, `CDM_PORT`, `CDM_DATABASE`, `CDM_SCHEMA`, `VOCAB_SCHEMA`, `RESULTS_SCHEMA`, `CDM_USER`, `CDM_PASSWORD`) to execute queries via `DatabaseConnector`.
+   - **Full Vocabulary Exploration**: The R Server MUST be able to perform concept ancestor lookups and concept set expressions directly against the vocabulary schema.
+   - **WebAPI Integration**: The R Server MUST be configured with `WEBAPI_URL` allowing `ROhdsiWebApi` to fetch cohort definitions, export concept sets, and execute cohort generation directly against WebAPI.
+7. **REQ-026 (PostgreSQL Database Connected to Atlas Instance)**: The PostgreSQL database cluster MUST be connected to WebAPI (schemas `webapi`, `cdm`, `vocab`, `results`), and the Atlas web application instance MUST be connected to WebAPI:
+   - Atlas users MUST be able to browse data sources (`source`, `source_daimon`), search standardized vocabularies, construct cohort definitions, and view precomputed cohort generation counts from the shared PostgreSQL database.
+8. **REQ-027 (OHDSI Study Shiny Apps & Report Deployment)**: The platform MUST provide a containerized Shiny runtime (`ohdsi-shiny` / `broadsea-open-shiny-server` on port 3838) capable of deploying interactive Shiny applications and published reports from OHDSI network studies:
+   - Supported interactive apps include `CohortDiagnostics` viewer, `CohortIncidence` viewer, `Characterization` viewer, `PheValuator` viewer, `OhdsiShinyModules`, `ShinyAppBuilder`, and study-specific results dashboards (e.g. [`ohdsi-studies/Taxis`](https://github.com/ohdsi-studies/Taxis)).
+   - The Shiny runtime MUST mount `/srv/shiny-server/` for interactive dashboards and `/srv/reports/` for static analytical Quarto / RMarkdown reports.
 
 #### B. Acceptance Criteria Matrix
 | Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
@@ -154,30 +159,35 @@ To a systems or DevOps engineer, the platform is a standard **3-tier data wareho
 | **AC-022** | Redis Broker | Redis responds to PING command. | `redis-cli ping` | Returns `PONG` |
 | **AC-023** | Dedicated R Server | RStudio Server is live with complete HADES & OHDSI package suite. | Inside R Server: `sapply(c('DatabaseConnector', 'Capr', 'CohortMethod', 'PatientLevelPrediction', 'Strategus', 'ROhdsiWebApi', 'Keeper'), requireNamespace, quietly=TRUE)` | All required packages return `TRUE` |
 | **AC-024** | Zero Microservices | Zero custom Plumber microservice containers running. | `docker ps --filter "name=plumber"` | Returns 0 running containers |
-| **AC-025** | CDM & WebAPI Interconnect | R Server connects to CDM via JDBC and WebAPI via REST. | Inside R Server: `DatabaseConnector::querySql(conn, "SELECT COUNT(*) FROM cdm.person")` & `ROhdsiWebApi::getWebApiVersion(baseUrl)` | Query returns non-zero patient count; WebAPI returns active version string |
+| **AC-025** | OMOP & Vocab Connect | R Server connects to both OMOP CDM and Vocabulary schemas. | Inside R Server: `DatabaseConnector::querySql(conn, "SELECT COUNT(*) FROM cdm.person")` & `querySql(conn, "SELECT COUNT(*) FROM vocab_54.concept")` | Both queries return non-zero counts (> 0) |
+| **AC-026** | Atlas DB Connection | Atlas instance connects to PostgreSQL via WebAPI. | `curl -s http://localhost:8080/WebAPI/source/sources` & `curl -s http://localhost:8080/WebAPI/vocabulary/vocab_54/search/aspirin` | Returns configured data sources and vocabulary search results |
+| **AC-027** | Shiny Apps & Reports | Shiny server is running and mounts study apps directory. | `curl -s http://localhost:3838/` | HTTP 200 with Shiny Server response |
 
 ---
 
-### Stage Gate 3: Atlas 3.0 Next-Gen Frontend & WebAPI 3.0
+### Stage Gate 3: Atlas 3.0 Next-Gen Frontend, WebAPI 3.0 & Public URL Ingress
 
 #### A. Requirements Specification
 1. **REQ-030 (Atlas 3.0 Micro-Frontend)**: Atlas 3.0 (Vue 3 / single-spa) MUST be deployed side-by-side with Atlas Classic, served at the root URL path (`/`).
 2. **REQ-031 (WebAPI 3.0 Backend)**: WebAPI 3.0 (Spring Boot 3, Java 21) MUST be deployed with TrexSQL DuckDB query caching enabled.
-3. **REQ-032 (Single-Domain Edge Ingress)**: Nginx reverse proxy MUST route all services under ONE domain name:
+3. **REQ-032 (Single-Domain Edge Ingress on Public URL)**: Nginx reverse proxy MUST route all platform components under ONE public URL domain over TLS 1.3:
    - `/` -> Atlas 3.0 Frontend
    - `/atlas/` -> Atlas Classic Frontend
-   - `/WebAPI/` -> WebAPI Backend
-   - `/rstudio/` -> Dedicated R Server (with WebSocket support)
-   - `/shiny/` -> Interactive Shiny Studio Hub
+   - `/WebAPI/` -> WebAPI Backend Engine
+   - `/rstudio/` -> Dedicated R Server (RStudio Server Web IDE with WebSockets)
+   - `/shiny/` -> Interactive OHDSI Study Shiny Apps & Dashboards (with WebSockets)
+   - `/reports/` -> Static & Interactive OHDSI Study Analytical HTML Reports
    - `/mcp/` -> Model Context Protocol (FastMCP) AI Gateway
+4. **REQ-033 (WebSocket Protocol Ingress)**: The reverse proxy MUST support WebSocket upgrades (`Upgrade $http_upgrade`, `Connection "upgrade"`) on `/rstudio/` and `/shiny/` paths to support interactive reactive UI updates.
 
 #### B. Acceptance Criteria Matrix
 | Requirement ID | Component | Requirement Statement | Verification Method | Pass Threshold |
 | :--- | :--- | :--- | :--- | :--- |
-| **AC-030** | Atlas 3.0 UI | Atlas 3.0 loads at root path. | `curl -s http://<domain>/` | HTTP 200 with single-spa entrypoint |
-| **AC-031** | Modern WebAPI | WebAPI 3.0 responds with TrexSQL enabled. | `curl -s http://<domain>/WebAPI/info` | HTTP 200; TrexSQL status active |
+| **AC-030** | Atlas 3.0 UI | Atlas 3.0 loads at root path. | `curl -s https://<domain>/` | HTTP 200 with single-spa entrypoint |
+| **AC-031** | Modern WebAPI | WebAPI 3.0 responds with TrexSQL enabled. | `curl -s https://<domain>/WebAPI/info` | HTTP 200; TrexSQL status active |
 | **AC-032** | RStudio Ingress | Nginx proxies RStudio over HTTPS with WebSockets. | `curl -s -k https://<domain>/rstudio/` | HTTP 200 / 302 redirect to RStudio auth |
-| **AC-033** | Single Ingress | All endpoints resolve under the single domain name. | Browser navigation across `/`, `/atlas/`, `/WebAPI/`, `/rstudio/` | Zero cross-origin or port redirect errors |
+| **AC-033** | Single Ingress | All endpoints resolve under the single domain name. | Browser navigation across `/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/` | Zero cross-origin or port redirect errors |
+| **AC-034** | Public Shiny & Reports | OHDSI Study Shiny apps and reports load via public URL. | `curl -s -k https://<domain>/shiny/` & `curl -s -k https://<domain>/reports/` | HTTP 200 with Shiny index and report index |
 
 ---
 
@@ -229,13 +239,16 @@ DevOps engineers must audit and verify each stage gate prior to production sign-
 - [ ] **AC-022**: Redis cache responds with `PONG` on port 6379.
 - [ ] **AC-023**: Dedicated R Server (`broadsea-hades`) live on port 8787 with HADES packages installed.
 - [ ] **AC-024**: Zero custom Plumber microservice containers running.
-- [ ] **AC-025**: R Server connects directly to CDM database via JDBC and WebAPI via REST.
+- [ ] **AC-025**: R Server connects directly to OMOP CDM and Vocabulary tables via JDBC and WebAPI via REST.
+- [ ] **AC-026**: PostgreSQL database connects to WebAPI and Atlas instance (data sources and vocab search functional).
+- [ ] **AC-027**: OHDSI Study Shiny server is operational, mounting study apps and reports.
 
-### Stage Gate 3: Atlas 3.0 Next-Gen & WebAPI 3.0
+### Stage Gate 3: Atlas 3.0 Next-Gen, WebAPI 3.0 & Public URL Ingress
 - [ ] **AC-030**: Atlas 3.0 Vue 3 single-spa frontend accessible at root path (`/`).
 - [ ] **AC-031**: Modern WebAPI 3.0 operational with TrexSQL DuckDB caching.
 - [ ] **AC-032**: Nginx edge proxy terminates TLS 1.3 and routes RStudio WebSockets at `/rstudio/`.
 - [ ] **AC-033**: Single unified public domain routing verified for all endpoints.
+- [ ] **AC-034**: OHDSI Study Shiny apps and published reports accessible via public URL (`/shiny/`, `/reports/`).
 
 ### Stage Gate 4: Sovereign Agentic Tier (MCP & BYO-Agent)
 - [ ] **AC-040**: Official `ohdsi/study-agent:latest` image running from `OHDSI/StudyAgent`.

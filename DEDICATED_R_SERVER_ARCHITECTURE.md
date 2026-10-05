@@ -171,7 +171,7 @@ library(DatabaseConnector)
 library(SqlRender)
 library(ROhdsiWebApi)
 
-# 1. Establish Direct JDBC Connection to OMOP CDM
+# 1. Establish Direct JDBC Connection to OMOP CDM & Athena Vocabularies
 connectionDetails <- createConnectionDetails(
   dbms = "postgresql",
   server = paste0(Sys.getenv("CDM_SERVER", "ohdsi-postgres"), ":", 
@@ -189,9 +189,14 @@ cdmSchema <- Sys.getenv("CDM_SCHEMA", "cdm_synthea100k")
 personCount <- querySql(conn, paste0("SELECT COUNT(*) AS total_patients FROM ", cdmSchema, ".person;"))
 print(paste("Total patients in CDM:", personCount$TOTAL_PATIENTS))
 
+# Query Athena Vocabulary concept count
+vocabSchema <- Sys.getenv("VOCAB_SCHEMA", "vocab_54")
+conceptCount <- querySql(conn, paste0("SELECT COUNT(*) AS total_concepts FROM ", vocabSchema, ".concept;"))
+print(paste("Total concepts in Vocabulary:", conceptCount$TOTAL_CONCEPTS))
+
 disconnect(conn)
 
-# 2. Establish REST Connection to WebAPI
+# 2. Establish REST Connection to WebAPI (Connected to Atlas Instance)
 webApiUrl <- Sys.getenv("WEBAPI_URL", "http://webapi-classic:8080/WebAPI")
 webApiInfo <- getWebApiVersion(baseUrl = webApiUrl)
 print(paste("Connected to WebAPI version:", webApiInfo))
@@ -211,8 +216,8 @@ print(sources[, c("sourceId", "sourceName", "sourceKey")])
 - **Default Credentials**: User `ohdsi` / Password `ohdsi2026` (configurable via `HADES_PASSWORD` in `.env`).
 - **Use Case**: Interactive cohort design in Capr, exploratory data analysis, reviewing diagnostic plots in RStudio graphics viewer.
 
-### Channel 2: Headless Docker Execution
-DevOps teams execute analytical scripts in batch mode via standard container execution:
+### Channel 2: Headless Batch Execution
+DevOps teams and analytical jobs execute scripts in batch mode via standard container execution:
 ```bash
 # Execute an R script headlessly inside the R Server container:
 docker exec -it broadsea-hades Rscript -e "source('/path/to/study_pipeline.R')"
@@ -223,6 +228,11 @@ docker exec -it broadsea-hades Rscript -e "installed.packages()[, c('Package', '
 
 ### Channel 3: Agentic AI Tool Calling via StudyAgent FastMCP
 External AI models (Claude, Cursor, Antigravity) connect to the official [`OHDSI/StudyAgent`](https://github.com/OHDSI/StudyAgent) FastMCP server on port 8790, which executes approved analytical queries against the Dedicated R Server and CDM database with enforced small-cell suppression (`MIN_CELL_COUNT >= 5`).
+
+### Channel 4: Deploying OHDSI Study Shiny Apps & Analytical Reports
+The R Server exports study results directly into the mounted Shiny Server and static reports directory:
+- **Interactive Dashboards**: Exported to `/srv/shiny-server/<study_name>/` (e.g. `CohortDiagnostics`, `CohortIncidence`, `Taxis`) and accessible publicly at `https://research.yourdomain.org/shiny/<study_name>/`.
+- **Static HTML Reports**: Exported to `/srv/reports/<study_name>/` and accessible publicly at `https://research.yourdomain.org/reports/<study_name>/`.
 
 ---
 

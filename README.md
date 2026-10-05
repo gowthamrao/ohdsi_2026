@@ -36,6 +36,7 @@ To a systems or DevOps engineer, the OHDSI platform is a standard **3-tier analy
      │      - TLS 1.3 Termination, HSTS 2-Year, Multi-Zone Rate Limiting       │
      │      - Small Cell Privacy Suppression Filter (MIN_CELL_COUNT >= 5)      │
      │      - Single-Domain Path Routing (/atlas, /WebAPI, /mcp, /rstudio, /)  │
+     │      - Public URLs for Study Shiny Apps (/shiny/) & Reports (/reports/) │
      └───────┬────────────────────┬────────────────────┬───────────────────────┘
              │                    │                    │
              ▼                    ▼                    ▼
@@ -43,7 +44,7 @@ To a systems or DevOps engineer, the OHDSI platform is a standard **3-tier analy
    │ Frontend Web Apps ││  Data & R Engine  ││  Agentic AI & MCP Gateway       │
    │ - Atlas 3.0 (Vue3)││ - WebAPI Classic  ││ - FastMCP Server (:8790)        │
    │ - Atlas Classic   ││ - WebAPI 3.0      ││   (SSE, Streamable HTTP, Stdio) │
-   │ - Shiny Studios   ││ - Dedicated R Svr ││ - Local Ollama LLM (:11434)     │
+   │ - Study Shiny Apps││ - Dedicated R Svr ││ - Local Ollama LLM (:11434)     │
    │ - RStudio (:8787) ││   (broadsea-hades)││ - Redis Task Broker (:6379)     │
    └─────────┬─────────┘└─────────┬─────────┘└────────────────┬────────────────┘
              │                    │                           │
@@ -55,6 +56,7 @@ To a systems or DevOps engineer, the OHDSI platform is a standard **3-tier analy
      │   - Master Lookup Schema (vocab_54: ~10M records with GIN indexes)      │
      │   - Structured Data Warehouse Schemas (cdm_synthea100k, cdm_synpuf_23m) │
      │   - Precomputed Aggregate Cache Schemas (results)                       │
+     │   - Shared Connection: Connected to WebAPI, Atlas, and Dedicated R Svr  │
      │   - Port 5432 (Quarantined to Private Docker Network / VPN / Tailscale) │
      └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -69,7 +71,9 @@ Translating domain-specific clinical terms into standard software engineering co
 | **Source Daimon** | Schema Routing Registry Table | Configuration table in PostgreSQL mapping logical database aliases to physical schemas (`cdm`, `vocab`, `results`). |
 | **WebAPI** | Java Spring Boot REST Backend | Core API service providing data source management, SQL transpilation, security integration, and query execution. |
 | **Atlas (Classic & 3.0)** | Web Application Frontend | Single-Page Application (Classic: Knockout.js; 3.0: Vue 3 / single-spa) providing query authoring and visualization. |
-| **Dedicated R Server** | Dedicated R Compute Server | Containerized RStudio Server (`broadsea-hades`, port 8787) hosting all OHDSI R libraries natively. Connected to CDM and WebAPI. |
+| **Dedicated R Server** | Dedicated R Compute Server | Containerized RStudio Server (`broadsea-hades`, port 8787) hosting all OHDSI R libraries natively. Connected to OMOP CDM and Vocabularies. |
+| **Study Shiny Apps** | Interactive Analytical Dashboards | Containerized Shiny Server (`ohdsi-shiny`, port 3838) publishing interactive study apps (`CohortDiagnostics`, `Taxis`) on public URL. |
+| **Study Reports** | Static Analytical HTML Reports | Quarto / RMarkdown compiled study reports served on public URL under `/reports/`. |
 | **Achilles** | Precomputed Aggregate Cache | Batch processing job that precomputes table counts and distributions, storing them in the `results` schema for instant dashboard retrieval. |
 | **Circe / Capr** | Query Transpiler & AST Builder | Compiles JSON or R criteria into target database SQL dialects (PostgreSQL, Snowflake, BigQuery). |
 | **Cohort / Phenotype** | Entity Segment / Filter Query | Specific criteria defining a population slice (e.g. subjects meeting specific criteria within a date window). |
@@ -78,18 +82,30 @@ Translating domain-specific clinical terms into standard software engineering co
 
 ---
 
-## 3. Dedicated R Server Interconnectivity (CDM & WebAPI)
+## 3. Dedicated R Server, Atlas & Study Applications Interconnectivity
 
-The **Dedicated R Server** (`broadsea-hades`) operates as a first-class compute node within the internal network:
-1. **Direct CDM Database Connectivity**:
-   - Pre-configured with JDBC drivers and database credentials.
-   - Connects directly to the PostgreSQL OMOP CDM database cluster (`ohdsi-postgres:5432/ohdsi`) via `DatabaseConnector`.
-   - Accesses the exact same CDM tables (`person`, `condition_occurrence`, etc.) and vocabularies shared by Atlas and WebAPI.
-2. **WebAPI Integration**:
-   - Pre-configured with `WEBAPI_URL` pointing to the internal WebAPI instance.
-   - Leverages `ROhdsiWebApi` to fetch cohort definitions, export concept sets, and execute cohort generation directly against WebAPI.
+The platform integrates compute, storage, applications, and public hosting as a cohesive ecosystem:
 
-*For complete architectural specifications, see [DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md).*
+1. **R Server Database Connectivity (OMOP CDM & Vocabularies)**:
+   - The **Dedicated R Server** (`broadsea-hades`) connects directly to the PostgreSQL database cluster via JDBC (`DatabaseConnector`).
+   - It queries both the clinical event tables (`person`, `condition_occurrence`, `visit_occurrence` in `cdm`) and the master Athena Vocabulary lookup tables (`concept`, `concept_ancestor`, `concept_relationship` in `vocab_54`).
+2. **PostgreSQL Connected to Atlas Instance**:
+   - The PostgreSQL database is connected to the WebAPI backend, which is connected to the Atlas web application instance.
+   - Researchers can search vocabularies, inspect data source characterizations, and author cohort definitions from the Atlas UI against the shared PostgreSQL database.
+3. **Deploying OHDSI Study Shiny Apps & Analytical Reports**:
+   - The platform provides a containerized Shiny runtime (`ohdsi-shiny` on port 3838) with volumes mounted at `/srv/shiny-server/` and `/srv/reports/`.
+   - Researchers can deploy interactive Shiny dashboards (`CohortDiagnostics`, `CohortIncidence`, `Characterization`, `OhdsiShinyModules`, [`ohdsi-studies/Taxis`](https://github.com/ohdsi-studies/Taxis)) and published HTML study reports.
+4. **Unified Public URL Exposure**:
+   - All tools and dashboards are served over HTTPS under **ONE public URL domain** via Nginx TLS 1.3:
+     - `https://<domain>/` -> Atlas 3.0 Next-Gen Frontend
+     - `https://<domain>/atlas/` -> Atlas Classic Frontend
+     - `https://<domain>/WebAPI/` -> WebAPI REST Backend
+     - `https://<domain>/rstudio/` -> Dedicated R Server (RStudio Server Web IDE)
+     - `https://<domain>/shiny/` -> Interactive OHDSI Study Shiny Apps
+     - `https://<domain>/reports/` -> Static OHDSI Study Analytical HTML Reports
+     - `https://<domain>/mcp/` -> Model Context Protocol (FastMCP) AI Agent Gateway
+
+*For complete architectural specifications, see [DEDICATED_R_SERVER_ARCHITECTURE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/DEDICATED_R_SERVER_ARCHITECTURE.md) and [PUBLIC_DOMAIN_HOSTING_GUIDE.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/PUBLIC_DOMAIN_HOSTING_GUIDE.md).*
 
 ---
 

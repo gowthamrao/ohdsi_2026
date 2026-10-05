@@ -59,15 +59,15 @@ This runbook guides DevOps engineers step-by-step from bare-metal host provision
    curl -s http://localhost:8983/solr/admin/info/system
    ```
 
-### Stage Gate 2: High-Capacity Data, Dedicated R Server & CDM Interconnect
-1. Launch PostgreSQL 16 tuned for 64GB+ shared buffers, Redis, and Solr:
+### Stage Gate 2: High-Capacity Data, Dedicated R Server, Atlas & Shiny Deployment
+1. Launch PostgreSQL 16 tuned for 64GB+ shared buffers, Redis, Solr, R Server, and Shiny Server:
    ```bash
-   docker compose up -d ohdsi-postgres ohdsi-redis broadsea-solr-vocab broadsea-hades
+   docker compose up -d ohdsi-postgres ohdsi-redis broadsea-solr-vocab broadsea-hades ohdsi-shiny
    ```
 2. Ingest Athena vocabularies and build trigram GIN indexes.
-3. Verify R Server interconnectivity with the shared CDM database and WebAPI:
+3. Verify R Server interconnectivity with OMOP CDM and Vocabulary tables:
    ```bash
-   # Verify JDBC connection to CDM:
+   # Verify JDBC connection to OMOP CDM and Athena Vocabularies:
    docker exec -it broadsea-hades Rscript -e "
      library(DatabaseConnector)
      conn <- connect(createConnectionDetails(
@@ -77,34 +77,59 @@ This runbook guides DevOps engineers step-by-step from bare-metal host provision
        password = Sys.getenv('CDM_PASSWORD'),
        pathToDriver = Sys.getenv('DATABASECONNECTOR_JAR_FOLDER', '/opt/drivers')
      ))
-     res <- querySql(conn, paste0('SELECT COUNT(*) FROM ', Sys.getenv('CDM_SCHEMA', 'cdm'), '.person'))
-     print(res)
+     patients <- querySql(conn, paste0('SELECT COUNT(*) FROM ', Sys.getenv('CDM_SCHEMA', 'cdm'), '.person'))
+     concepts <- querySql(conn, paste0('SELECT COUNT(*) FROM ', Sys.getenv('VOCAB_SCHEMA', 'vocab_54'), '.concept'))
+     print(paste('Patients:', patients[1,1], '| Concepts:', concepts[1,1]))
      disconnect(conn)
    "
-
-   # Verify REST connection to WebAPI:
-   docker exec -it broadsea-hades Rscript -e "
-     library(ROhdsiWebApi)
-     print(getWebApiVersion(baseUrl = Sys.getenv('WEBAPI_URL', 'http://webapi-classic:8080/WebAPI')))
-   "
+   ```
+4. Verify PostgreSQL connection to Atlas Instance via WebAPI:
+   ```bash
+   curl -s http://localhost:8080/WebAPI/source/sources | jq .
+   curl -s http://localhost:8080/WebAPI/vocabulary/vocab_54/search/aspirin | jq .
+   ```
+5. Deploy and verify OHDSI Study Shiny Apps and Reports:
+   ```bash
+   # Verify Shiny Server is operational:
+   curl -s http://localhost:3838/
+   # Publish study apps (e.g. CohortDiagnostics, Taxis) to /srv/shiny-server/<study_name>/
+   # Publish study reports to /srv/reports/<study_name>/
    ```
 
-### Stage Gate 3: Atlas 3.0 Next-Gen Frontend & WebAPI 3.0
+### Stage Gate 3: Atlas 3.0 Next-Gen Frontend, WebAPI 3.0 & Public URL Ingress
 1. Deploy modern Atlas 3.0 single-spa micro-frontend and WebAPI 3.0:
    ```bash
-   docker compose up -d atlas3-webapi atlas3-frontend atlas3-db-init
+   docker compose up -d atlas3-webapi atlas3-frontend atlas3-db-init reverse-proxy certbot
    ```
-2. Verify Atlas 3.0 loads at `http://localhost:3000` or via unified path `/`.
+2. Verify all platform components over the single **Public Domain URL**:
+   ```bash
+   # 1. Root: Atlas 3.0 Frontend
+   curl -I -k https://<domain>/
 
-### Stage Gate 4: Public Domain TLS Ingress & Hosted FastMCP AI Gateway
-1. Deploy Nginx reverse proxy with TLS 1.3 termination and Let's Encrypt certificate renewal.
-2. Launch the official StudyAgent MCP container and local Ollama inference:
+   # 2. Atlas Classic Frontend
+   curl -I -k https://<domain>/atlas/
+
+   # 3. WebAPI Backend REST API
+   curl -s -k https://<domain>/WebAPI/info | jq .
+
+   # 4. Dedicated R Server (RStudio Server Web IDE)
+   curl -I -k https://<domain>/rstudio/
+
+   # 5. OHDSI Study Shiny Apps
+   curl -I -k https://<domain>/shiny/
+
+   # 6. OHDSI Study Analytical HTML Reports
+   curl -I -k https://<domain>/reports/
+   ```
+
+### Stage Gate 4: Sovereign Agentic Tier (Hosted FastMCP & BYO-Agent)
+1. Launch the official StudyAgent MCP container and local Ollama inference:
    ```bash
    docker compose up -d study-agent-mcp study-agent-acp ollama-service
    ```
-3. Test MCP agent connectivity:
+2. Test MCP agent connectivity:
    ```bash
-   curl -s -H "Authorization: Bearer <token>" https://<domain>/mcp/sse
+   curl -s -k https://<domain>/mcp/sse -H "Authorization: Bearer <token>"
    ```
 
 ---

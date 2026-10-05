@@ -42,15 +42,15 @@ From an infrastructure and systems perspective, this repository specifies requir
 
 ---
 
-## 3. Dedicated R Server Interconnectivity (CDM & WebAPI)
+## 3. Dedicated R Server Interconnectivity (OMOP CDM, Vocabularies & WebAPI)
 
-The Dedicated R Server (`broadsea-hades`) connects directly to the OMOP CDM database and the WebAPI backend:
+The Dedicated R Server (`broadsea-hades`) connects directly to the OMOP CDM event tables, Athena Vocabularies, and the WebAPI backend:
 
 ```r
 library(DatabaseConnector)
 library(ROhdsiWebApi)
 
-# 1. Connect to OMOP CDM
+# 1. Connect to OMOP CDM and Athena Vocabularies
 connectionDetails <- createConnectionDetails(
   dbms = "postgresql",
   server = paste0(Sys.getenv("CDM_SERVER", "ohdsi-postgres"), "/", Sys.getenv("CDM_DATABASE", "ohdsi")),
@@ -58,7 +58,14 @@ connectionDetails <- createConnectionDetails(
   password = Sys.getenv("CDM_PASSWORD")
 )
 
-# 2. Connect to WebAPI
+conn <- connect(connectionDetails)
+# Query CDM clinical event tables
+querySql(conn, "SELECT COUNT(*) FROM cdm_synthea100k.person;")
+# Query standardized Athena Vocabularies
+querySql(conn, "SELECT COUNT(*) FROM vocab_54.concept;")
+disconnect(conn)
+
+# 2. Connect to WebAPI (shared with Atlas instance)
 webApiUrl <- Sys.getenv("WEBAPI_URL", "http://webapi-classic:8080/WebAPI")
 ROhdsiWebApi::getWebApiVersion(baseUrl = webApiUrl)
 ```
@@ -72,8 +79,8 @@ DevOps engineers must verify each stage gate sequentially:
 
 - **Stage Gate 0**: Host & Kernel Hardening (Ubuntu 24.04 LTS, NVMe `noatime,nodiratime`, UFW firewall).
 - **Stage Gate 1**: Turnkey Broadsea Core (PostgreSQL, WebAPI Classic, Atlas Classic, Solr).
-- **Stage Gate 2**: High-Capacity Data & Dedicated R Server (64GB shared buffers, full Athena vocab, Dedicated R Server connected to CDM and WebAPI).
-- **Stage Gate 3**: Atlas 3.0 Next-Gen Frontend & WebAPI 3.0 (single-domain routing under TLS 1.3).
+- **Stage Gate 2**: High-Capacity Data, Dedicated R Server, Atlas & Shiny Apps (64GB shared buffers, full Athena vocab, Dedicated R Server connected to OMOP CDM and Vocabularies, Atlas connected to PostgreSQL via WebAPI, Shiny Server mounting study apps).
+- **Stage Gate 3**: Atlas 3.0 Next-Gen Frontend, WebAPI 3.0 & Public URL Ingress (single-domain routing under TLS 1.3 for `/`, `/atlas/`, `/WebAPI/`, `/rstudio/`, `/shiny/`, `/reports/`, `/mcp/`).
 - **Stage Gate 4**: Sovereign Agentic Tier (hosted FastMCP via `OHDSI/StudyAgent`, local Ollama LLM, AST guardrail).
 
 *Detailed requirements and acceptance criteria matrices: [STAGE_GATED_SPECIFICATIONS.md](file:///c:/files/git/github/ohdsi/ohdsi_2026/STAGE_GATED_SPECIFICATIONS.md).*
